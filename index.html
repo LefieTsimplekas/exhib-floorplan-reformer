@@ -1,4 +1,4 @@
-<!doctype html><html lang="el"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="description" content="Από το DWG της έκθεσης σε καθαρή κάτοψη A3 για κάθε περίπτερο."><style>:root{color-scheme:light}body{margin:0}[hidden]{display:none!important}</style></head><body><script>window.__STANDALONE=true;</script><title>Κατόψεις Stand</title>
+<!doctype html><html lang="el"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="description" content="Από το DWG της έκθεσης σε καθαρή κάτοψη A3 για κάθε περίπτερο."><style>:root{color-scheme:light}body{margin:0}[hidden]{display:none!important}</style></head><body><script>window.__STANDALONE=true;</script><title>OCR Floorplan Maker</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Commissioner:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap">
@@ -112,6 +112,7 @@ details[open] > summary::before{transform:rotate(45deg)}
 .xbox{fill:transparent;stroke:none;cursor:pointer}
 .xbox:hover{fill:rgba(38,56,255,.10)}
 .xbox.sel{fill:rgba(38,56,255,.16);stroke:#2638ff;stroke-width:.6;stroke-dasharray:1.5 1}
+.sitebox{margin-top:18px;padding-top:14px;border-top:1px solid var(--line-2)}
 .dl{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;align-items:center}
 .dl .fname{font:500 12px var(--f-mono);color:var(--ink-2);word-break:break-all}
 .empty{display:flex;flex-direction:column;gap:16px}
@@ -215,6 +216,7 @@ details[open] > summary::before{transform:rotate(45deg)}
             <div class="seg" role="group" aria-label="Εκδοχή">
               <button type="button" id="vBlue" aria-pressed="true">Μπλε</button>
               <button type="button" id="vBlack" aria-pressed="false">Μαύρο</button>
+              <button type="button" id="vSite" aria-pressed="false">Site</button>
             </div>
           </div>
           <div class="sheetbox" id="sheet"></div>
@@ -225,6 +227,16 @@ details[open] > summary::before{transform:rotate(45deg)}
             <button type="button" id="dlZip">Όλα σε ZIP</button>
           </div>
           <div class="dl"><span class="fname" id="fnames"></span></div>
+          <div class="sitebox" id="siteBox">
+            <div class="step" style="margin:0"><b>SITE</b><h2>Κάτοψη site</h2></div>
+            <p class="small muted" style="margin:6px 0 10px">PDF με μπλε κατόψεις και μια δική σας εικόνα: λογότυπο της έκθεσης ή εικόνα με πληροφορίες. Μπαίνει πάνω ή κάτω από την κάτοψη, χωρίς να την καλύπτει.</p>
+            <div class="row">
+              <label class="drop" id="dropImg" style="flex:1 1 220px;padding:12px"><input type="file" id="fileImg" accept="image/png,image/jpeg,image/webp,image/svg+xml"><strong id="imgLabel">Επιλέξτε εικόνα</strong><span class="muted">PNG, JPG, WEBP ή SVG</span></label>
+              <label class="field" style="width:120px">Θέση<select id="imgPos"><option value="top">Πάνω</option><option value="bottom">Κάτω</option></select></label>
+              <label class="field" style="width:120px">Μέγεθος<select id="imgSize"><option value="S">Μικρό</option><option value="M" selected>Μεσαίο</option><option value="L">Μεγάλο</option></select></label>
+            </div>
+            <div class="dl"><button type="button" class="primary" id="dlSite" disabled>Λήψη κάτοψης site (PDF)</button><button type="button" class="ghost" id="imgClear" hidden>Αφαίρεση εικόνας</button></div>
+          </div>
           <div class="callout warn" id="noDl" hidden style="margin-top:10px">Σε αυτή την προβολή τα αρχεία δεν κατεβαίνουν αυτόματα. Το JPG μπορείτε να το πάρετε με «Λήψη JPG» και δεξί κλικ στην εικόνα. Για PDF και ZIP ανοίξτε τη σελίδα συνδεδεμένοι στο claude.ai.</div>
           <div class="callout warn" id="fallback" hidden style="margin-top:10px"></div>
         </div>
@@ -758,7 +770,7 @@ const FP = (() => {
 
   // ---------- layout to A3 (mm) ----------
   const A3 = { W: 297, H: 420 }, MMPT = 25.4 / 72;
-  function layout(res, cfg, pav, measure) {
+  function layout(res, cfg, pav, measure, opts = {}) {
     // measure(text) -> {w, h} in points for font size 1 (bold sans)
     const axis = cfg.axis || 'y';
     const P = cfg.pavilions.find(p => p.name === pav);
@@ -775,7 +787,10 @@ const FP = (() => {
     walls.forEach(grow); allp.forEach(p => grow(p.getExteriorRing().getCoordinates().map(c => [c.x, c.y])));
     if (!isFinite(x0)) return null;
     x0 -= 1; y0 -= 1; x1 += 1; y1 += 1;
-    const m = 0.06, axL = m * A3.W, axB = 0.7 * m * A3.H, axW = (1 - 2 * m) * A3.W, axH = (1 - 1.4 * m) * A3.H;
+    const m = 0.06, axL = m * A3.W, axW = (1 - 2 * m) * A3.W;
+    // optional space kept free above/below the plan (mm), e.g. for an exhibition image on the site version
+    const rT = opts.reserveTop || 0, rB = opts.reserveBottom || 0;
+    const axB = 0.7 * m * A3.H + rB, axH = (1 - 1.4 * m) * A3.H - rT - rB;
     const s = Math.min(axW / (x1 - x0), axH / (y1 - y0));
     const offX = axL + (axW - (x1 - x0) * s) / 2, offB = axB + (axH - (y1 - y0) * s) / 2;
     const X = x => offX + (x - x0) * s, Y = y => A3.H - (offB + (y - y0) * s);
@@ -8031,7 +8046,7 @@ window.dispatchEvent(new Event('dwg-ready'));
 <script>
 (() => {
   const $ = id => document.getElementById(id);
-  const st = { host: null, sv: null, xrefNeed: [], xrefs: [], G: null, cfg: null, res: null, rep: null, pav: null, variant: 'GALAXY', layouts: {}, fileName: '' };
+  const st = { host: null, sv: null, xrefNeed: [], xrefs: [], G: null, cfg: null, res: null, rep: null, pav: null, variant: 'GALAXY', layouts: {}, fileName: '', site: { img: null, w: 0, h: 0, fmt: 'PNG', pos: 'top', size: 'M' } };
   let lib = null, dl = null;
 
   // ---------- capabilities ----------
@@ -8284,14 +8299,32 @@ window.dispatchEvent(new Event('dwg-ready'));
   const ensureFont = () => fontReady || (fontReady = (document.fonts && document.fonts.load ? document.fonts.load('700 40px "StandSans"', 'B08Αα').catch(() => {}) : Promise.resolve()));
   const esc = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   function measure(t) { mcan.font = `700 100px ${FONT}`; const m = mcan.measureText(t); return { w: m.width / 100, h: (m.actualBoundingBoxAscent + m.actualBoundingBoxDescent) / 100 || 0.72 }; }
-  function getLayout(pav) { if (!st.layouts[pav]) st.layouts[pav] = FP.layout(st.res, st.cfg, pav, measure); return st.layouts[pav]; }
-  const style = v => v === 'GALAXY' ? { stand: '#0000ff', slw: 0.9 } : { stand: '#000000', slw: 0.6 };
+  // site version: the image sits in a band above or below the plan; the plan is fitted into what is left
+  const SIZES = { S: 45, M: 75, L: 110 }, MARGIN_X = 0.06 * 297, MARGIN_Y = 0.042 * 420, GAP = 6;
+  function siteBand() {
+    const S = st.site, maxH = SIZES[S.size] || 75, availW = 297 - 2 * MARGIN_X;
+    const ar = S.img ? S.w / S.h : 4;
+    let bh = Math.min(maxH, availW / ar), bw = bh * ar;
+    const x = (297 - bw) / 2, y = S.pos === 'bottom' ? 420 - MARGIN_Y - bh : MARGIN_Y;
+    return { x, y, w: bw, h: bh, reserve: bh + GAP };
+  }
+  function getLayout(pav, site) {
+    const b = site ? siteBand() : null, key = site ? `${pav}|site|${st.site.pos}|${b.reserve.toFixed(1)}` : pav;
+    if (!st.layouts[key]) st.layouts[key] = FP.layout(st.res, st.cfg, pav, measure, b ? (st.site.pos === 'bottom' ? { reserveBottom: b.reserve } : { reserveTop: b.reserve }) : {});
+    return st.layouts[key];
+  }
+  const style = v => v === 'XARTHS' ? { stand: '#000000', slw: 0.6 } : { stand: '#0000ff', slw: 0.9 };
   const PT = FP.MMPT, WALL_LW = 0.45;
   function toSVG(D, v, interactive) {
     const S = style(v), f = n => n.toFixed(2);
     let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 297 420" role="img" aria-label="Κάτοψη περιπτέρου">`;
     s += `<path d="${D.walls.map(p => 'M' + p.map(q => f(q[0]) + ' ' + f(q[1])).join('L')).join('')}" fill="none" stroke="#000" stroke-width="${WALL_LW * PT}" stroke-linecap="butt"/>`;
     s += `<path d="${D.stands.map(p => 'M' + p.map(q => f(q[0]) + ' ' + f(q[1])).join('L') + 'Z').join('')}" fill="none" stroke="${S.stand}" stroke-width="${S.slw * PT}" stroke-linejoin="miter"/>`;
+    if (v === 'SITE') {
+      const b = siteBand();
+      if (st.site.img) s += `<image href="${st.site.img}" x="${f(b.x)}" y="${f(b.y)}" width="${f(b.w)}" height="${f(b.h)}" preserveAspectRatio="xMidYMid meet"/>`;
+      else s += `<rect x="${f(b.x)}" y="${f(b.y)}" width="${f(b.w)}" height="${f(b.h)}" fill="#f1f3fb" stroke="#2638ff" stroke-width=".4" stroke-dasharray="2 1.5"/><text x="${f(b.x + b.w / 2)}" y="${f(b.y + b.h / 2)}" font-family='${FONT}' font-size="6" fill="#2638ff" text-anchor="middle" dominant-baseline="central">Η εικόνα της έκθεσης μπαίνει εδώ</text>`;
+    }
     s += `<g font-family='${FONT}' font-weight="700" fill="#111" text-anchor="middle">`;
     for (const t of D.texts) { const fs = t.size * PT, lh = fs * 1.15, n = t.lines.length; t.lines.forEach((ln, i) => { s += `<text x="${f(t.x)}" y="${f(t.y + (i - (n - 1) / 2) * lh)}" font-size="${f(fs)}" dominant-baseline="central">${esc(ln)}</text>`; }); }
     s += '</g>';
@@ -8307,6 +8340,7 @@ window.dispatchEvent(new Event('dwg-ready'));
     const poly = (p, close) => { const segs = []; for (let i = 1; i < p.length; i++) segs.push([p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]]); doc.lines(segs, p[0][0], p[0][1], [1, 1], 'S', !!close); };
     doc.setDrawColor(0, 0, 0); doc.setLineWidth(WALL_LW * PT); D.walls.forEach(p => poly(p, false));
     const c = S.stand === '#0000ff' ? [0, 0, 255] : [0, 0, 0]; doc.setDrawColor(...c); doc.setLineWidth(S.slw * PT); D.stands.forEach(p => poly(p, false));
+    if (v === 'SITE' && st.site.img) { const b = siteBand(); doc.addImage(st.site.img, st.site.fmt, b.x, b.y, b.w, b.h, undefined, 'FAST'); }
     doc.addFileToVFS('StandSans-Bold.ttf', FONT_B64); doc.addFont('StandSans-Bold.ttf', 'StandSans', 'bold');
     doc.setFont('StandSans', 'bold'); doc.setTextColor(17, 17, 17);
     for (const t of D.texts) { doc.setFontSize(t.size); const lh = t.size * PT * 1.15, n = t.lines.length; t.lines.forEach((ln, i) => doc.text(ln, t.x, t.y + (i - (n - 1) / 2) * lh, { align: 'center', baseline: 'middle' })); }
@@ -8324,6 +8358,7 @@ window.dispatchEvent(new Event('dwg-ready'));
   }
   const prefix = () => ($('exName').value.trim() || 'EKTHESI').replace(/[\\/:*?"<>|]+/g, '_').replace(/\s+/g, '_');
   const fname = (pav, v) => `${prefix()}_Periptero_${pav}_${v}.${v === 'GALAXY' ? 'jpg' : 'pdf'}`;
+  const isSite = () => st.variant === 'SITE';
 
   function renderTabs() {
     const tabs = $('tabs'); tabs.innerHTML = '';
@@ -8333,10 +8368,11 @@ window.dispatchEvent(new Event('dwg-ready'));
     $('emptyState').hidden = true; $('sheetView').hidden = false;
     const box = $('sheet'); box.innerHTML = '<div class="status"><span class="spin"></span><span>Σχεδίαση κάτοψης…</span></div>'; await tick();
     await ensureFont();
-    const D = getLayout(st.pav);
+    const D = getLayout(st.pav, isSite());
     box.innerHTML = D ? toSVG(D, st.variant, true) : '<p class="muted">Δεν υπάρχει τίποτα σε αυτό το περίπτερο.</p>';
+    $('dlSite').disabled = !st.site.img || !st.res;
     renderExtraEditor();
-    $('fnames').textContent = `${fname(st.pav, 'XARTHS')}  ·  ${fname(st.pav, 'GALAXY')}`;
+    $('fnames').textContent = `${fname(st.pav, 'XARTHS')}  ·  ${fname(st.pav, 'GALAXY')}${st.site.img ? '  ·  ' + fname(st.pav, 'SITE') : ''}`;
     $('dlPdf').textContent = 'Λήψη PDF (μαύρο)'; $('dlJpg').textContent = 'Λήψη JPG (μπλε)';
   }
   $('sheet').addEventListener('click', e => {
@@ -8355,14 +8391,35 @@ window.dispatchEvent(new Event('dwg-ready'));
     const ok = document.createElement('button'); ok.type = 'button'; ok.className = 'primary'; ok.textContent = 'Εφαρμογή';
     const clr = document.createElement('button'); clr.type = 'button'; clr.textContent = 'Άδειο κουτί';
     const cancel = document.createElement('button'); cancel.type = 'button'; cancel.className = 'ghost'; cancel.textContent = 'Κλείσιμο';
-    const apply = async val => { st.cfg.extra_labels = st.cfg.extra_labels || {}; if (val) st.cfg.extra_labels[key] = val; else delete st.cfg.extra_labels[key]; delete st.layouts[st.pav]; await renderSheet(); renderReport(); toast(val ? 'Το κείμενο μπήκε στην κάτοψη.' : 'Το κουτί έμεινε άδειο.'); };
+    const apply = async val => { st.cfg.extra_labels = st.cfg.extra_labels || {}; if (val) st.cfg.extra_labels[key] = val; else delete st.cfg.extra_labels[key]; Object.keys(st.layouts).forEach(k => { if (k === st.pav || k.startsWith(st.pav + '|')) delete st.layouts[k]; }); await renderSheet(); renderReport(); toast(val ? 'Το κείμενο μπήκε στην κάτοψη.' : 'Το κουτί έμεινε άδειο.'); };
     ok.onclick = () => apply(inp.value.trim()); clr.onclick = () => apply('');
     cancel.onclick = () => { st.selExtra = null; renderSheet(); };
     inp.onkeydown = e => { if (e.key === 'Enter') apply(inp.value.trim()); if (e.key === 'Escape') cancel.onclick(); };
     row.append(ok, clr, cancel); box.append(lb, row);
   }
-  $('vBlue').onclick = () => { st.variant = 'GALAXY'; $('vBlue').setAttribute('aria-pressed', 'true'); $('vBlack').setAttribute('aria-pressed', 'false'); renderSheet(); };
-  $('vBlack').onclick = () => { st.variant = 'XARTHS'; $('vBlack').setAttribute('aria-pressed', 'true'); $('vBlue').setAttribute('aria-pressed', 'false'); renderSheet(); };
+  const setVariant = v => { st.variant = v; [['vBlue', 'GALAXY'], ['vBlack', 'XARTHS'], ['vSite', 'SITE']].forEach(([id, k]) => $(id).setAttribute('aria-pressed', String(k === v))); renderSheet(); };
+  $('vBlue').onclick = () => setVariant('GALAXY');
+  $('vBlack').onclick = () => setVariant('XARTHS');
+  $('vSite').onclick = () => setVariant('SITE');
+  // site image: normalised through a canvas (PNG keeps transparency; photos become JPEG to stay small)
+  wireDrop($('dropImg'), $('fileImg'), async file => {
+    if (!/^image\//.test(file.type)) { toast('Επιλέξτε αρχείο εικόνας (PNG, JPG, WEBP ή SVG).'); return; }
+    const url = await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = no; r.readAsDataURL(file); });
+    const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = url; });
+    let w = img.naturalWidth || 1200, h = img.naturalHeight || 400;
+    const scale = Math.min(1, 3000 / Math.max(w, h)); w = Math.round(w * scale); h = Math.round(h * scale);
+    const cv = document.createElement('canvas'); cv.width = w; cv.height = h; const g = cv.getContext('2d');
+    const photo = /jpe?g/i.test(file.type);
+    if (photo) { g.fillStyle = '#fff'; g.fillRect(0, 0, w, h); }
+    g.drawImage(img, 0, 0, w, h);
+    st.site = { ...st.site, img: photo ? cv.toDataURL('image/jpeg', 0.92) : cv.toDataURL('image/png'), fmt: photo ? 'JPEG' : 'PNG', w, h, name: file.name };
+    $('imgLabel').textContent = file.name; $('imgClear').hidden = false;
+    setVariant('SITE'); toast('Η εικόνα μπήκε στην κάτοψη site.');
+  });
+  $('imgPos').onchange = () => { st.site.pos = $('imgPos').value; if (isSite()) renderSheet(); };
+  $('imgSize').onchange = () => { st.site.size = $('imgSize').value; if (isSite()) renderSheet(); };
+  $('imgClear').onclick = () => { st.site = { ...st.site, img: null, name: null }; $('imgLabel').textContent = 'Επιλέξτε εικόνα'; $('imgClear').hidden = true; $('fileImg').value = ''; renderSheet(); };
+  $('dlSite').onclick = async () => { if (!st.site.img) return; await ensureFont(); const D = getLayout(st.pav, true); if (D) await save(fname(st.pav, 'SITE'), toPDF(D, 'SITE')); };
   $('exName').oninput = () => st.pav && ($('fnames').textContent = `${fname(st.pav, 'XARTHS')}  ·  ${fname(st.pav, 'GALAXY')}`);
 
   async function fallback(filename, data) {
@@ -8392,18 +8449,24 @@ window.dispatchEvent(new Event('dwg-ready'));
     try { await dl.save({ filename, data }); toast('Αποθηκεύτηκε: ' + filename); }
     catch (e) { if (e && e.code === 'declined') return; if (e && e.code === 'rate_limited') { toast('Περιμένετε λίγο και δοκιμάστε ξανά.'); return; } if (e && ['unavailable','not_granted','capability_disabled','capability_removed'].includes(e.code)) { dl = null; await fallback(filename, data); return; } toast('Η λήψη δεν ολοκληρώθηκε.'); }
   }
-  $('dlPdf').onclick = async () => { await ensureFont(); const D = getLayout(st.pav); if (D) await save(fname(st.pav, 'XARTHS'), toPDF(D, 'XARTHS')); };
-  $('dlJpg').onclick = async () => { await ensureFont(); const D = getLayout(st.pav); if (D) await save(fname(st.pav, 'GALAXY'), await toJPG(D, 'GALAXY')); };
+  $('dlPdf').onclick = async () => { await ensureFont(); const D = getLayout(st.pav, false); if (D) await save(fname(st.pav, 'XARTHS'), toPDF(D, 'XARTHS')); };
+  $('dlJpg').onclick = async () => { await ensureFont(); const D = getLayout(st.pav, false); if (D) await save(fname(st.pav, 'GALAXY'), await toJPG(D, 'GALAXY')); };
   $('dlZip').onclick = async () => {
     const b = $('dlZip'); b.disabled = true; const old = b.textContent; b.textContent = 'Ετοιμασία…'; await tick();
     try {
       const z = new JSZip();
-      for (const P of st.cfg.pavilions) { const D = getLayout(P.name); if (!D) continue; z.file(fname(P.name, 'XARTHS'), toPDF(D, 'XARTHS')); z.file(fname(P.name, 'GALAXY'), await toJPG(D, 'GALAXY')); await tick(); }
+      await ensureFont();
+      for (const P of st.cfg.pavilions) {
+        const D = getLayout(P.name, false); if (!D) continue;
+        z.file(fname(P.name, 'XARTHS'), toPDF(D, 'XARTHS')); z.file(fname(P.name, 'GALAXY'), await toJPG(D, 'GALAXY'));
+        if (st.site.img) { const DS = getLayout(P.name, true); if (DS) z.file(fname(P.name, 'SITE'), toPDF(DS, 'SITE')); }
+        await tick();
+      }
       const blob = await z.generateAsync({ type: 'blob' });
       await save(`${prefix()}_katopseis.zip`, blob);
     } finally { b.textContent = old; b.disabled = false; updateDl(); }
   };
-  window.__app = { st, analyze, toPDF, toJPG, getLayout, fname };
+  window.__app = { st, analyze, toPDF, toJPG, getLayout, fname, siteBand };
 })();
 </script>
 </body></html>

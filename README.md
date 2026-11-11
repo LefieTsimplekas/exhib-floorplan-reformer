@@ -4,6 +4,7 @@
 
 - `ΕΚΘΕΣΗ_Periptero_NN_XARTHS.pdf`: όλες οι γραμμές μαύρες, διανυσματικό PDF
 - `ΕΚΘΕΣΗ_Periptero_NN_GALAXY.jpg`: stand με μπλε περίγραμμα, JPG 300 dpi
+- `ΕΚΘΕΣΗ_Periptero_NN_SITE.pdf`: μπλε κάτοψη μαζί με εικόνα της έκθεσης (λογότυπο ή πληροφορίες), πάνω ή κάτω
 
 **Χρήση:** https://lefietsimplekas.github.io/exhib-floorplan-reformer/
 

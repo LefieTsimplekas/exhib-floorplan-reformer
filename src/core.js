@@ -518,7 +518,7 @@ const FP = (() => {
 
   // ---------- layout to A3 (mm) ----------
   const A3 = { W: 297, H: 420 }, MMPT = 25.4 / 72;
-  function layout(res, cfg, pav, measure) {
+  function layout(res, cfg, pav, measure, opts = {}) {
     // measure(text) -> {w, h} in points for font size 1 (bold sans)
     const axis = cfg.axis || 'y';
     const P = cfg.pavilions.find(p => p.name === pav);
@@ -535,7 +535,10 @@ const FP = (() => {
     walls.forEach(grow); allp.forEach(p => grow(p.getExteriorRing().getCoordinates().map(c => [c.x, c.y])));
     if (!isFinite(x0)) return null;
     x0 -= 1; y0 -= 1; x1 += 1; y1 += 1;
-    const m = 0.06, axL = m * A3.W, axB = 0.7 * m * A3.H, axW = (1 - 2 * m) * A3.W, axH = (1 - 1.4 * m) * A3.H;
+    const m = 0.06, axL = m * A3.W, axW = (1 - 2 * m) * A3.W;
+    // optional space kept free above/below the plan (mm), e.g. for an exhibition image on the site version
+    const rT = opts.reserveTop || 0, rB = opts.reserveBottom || 0;
+    const axB = 0.7 * m * A3.H + rB, axH = (1 - 1.4 * m) * A3.H - rT - rB;
     const s = Math.min(axW / (x1 - x0), axH / (y1 - y0));
     const offX = axL + (axW - (x1 - x0) * s) / 2, offB = axB + (axH - (y1 - y0) * s) / 2;
     const X = x => offX + (x - x0) * s, Y = y => A3.H - (offB + (y - y0) * s);
