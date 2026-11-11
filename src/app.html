@@ -1,0 +1,618 @@
+<title>Κατόψεις Stand</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Commissioner:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: drafting-table tool — control column on the left, the A3 sheet on the right like a plotter bed. */
+:root{
+  --paper:#f4f6fa; --sheet:#ffffff; --ink:#141a2b; --ink-2:#4b556d; --line:#d7dce7; --line-2:#e8ebf2;
+  --accent:#2638ff; --accent-ink:#ffffff; --accent-soft:#e6e9ff;
+  --ok:#137a4b; --ok-soft:#e2f4ea; --warn:#9a5b00; --warn-soft:#fdf0d9; --bad:#b42318; --bad-soft:#fde7e5;
+  --band-a:rgba(38,56,255,.07); --band-b:rgba(38,56,255,.14);
+  --f-display:"Commissioner","Segoe UI",system-ui,sans-serif;
+  --f-body:"Inter","Segoe UI",system-ui,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#0f1320; --sheet:#171c2c; --ink:#e8ebf5; --ink-2:#a3abc2; --line:#2c3449; --line-2:#222a3d;
+  --accent:#7d8bff; --accent-ink:#0f1320; --accent-soft:#232a52;
+  --ok:#5fd29a; --ok-soft:#163327; --warn:#f0b65a; --warn-soft:#3a2c12; --bad:#ff8a80; --bad-soft:#3d1a18;
+  --band-a:rgba(125,139,255,.10); --band-b:rgba(125,139,255,.20); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#0f1320; --sheet:#171c2c; --ink:#e8ebf5; --ink-2:#a3abc2; --line:#2c3449; --line-2:#222a3d;
+  --accent:#7d8bff; --accent-ink:#0f1320; --accent-soft:#232a52;
+  --ok:#5fd29a; --ok-soft:#163327; --warn:#f0b65a; --warn-soft:#3a2c12; --bad:#ff8a80; --bad-soft:#3d1a18;
+  --band-a:rgba(125,139,255,.10); --band-b:rgba(125,139,255,.20); color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font:14px/1.5 var(--f-body);margin:0}
+.wrap{max-width:1380px;margin:0 auto;padding-block:20px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+header.top{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px 24px;padding-bottom:16px;border-bottom:1px solid var(--line);margin-bottom:20px}
+h1{font:700 26px/1.15 var(--f-display);letter-spacing:-.01em;margin:0;text-wrap:balance}
+h1 small{display:block;font:500 14px/1.4 var(--f-body);color:var(--ink-2);letter-spacing:0;margin-top:4px}
+.privacy{font-size:12.5px;color:var(--ink-2);display:flex;gap:6px;align-items:center}
+.privacy svg{flex:none}
+.grid{display:grid;grid-template-columns:minmax(0,420px) minmax(0,1fr);gap:20px;align-items:start}
+@media (max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}}
+.col{display:flex;flex-direction:column;gap:14px;min-width:0}
+section.card{background:var(--sheet);border:1px solid var(--line);border-radius:var(--r);padding:16px;min-width:0}
+.step{display:flex;align-items:baseline;gap:10px;margin:0 0 10px}
+.step b{font:700 11px/1 var(--f-mono);color:var(--accent);letter-spacing:.06em}
+.step h2{font:600 16px/1.3 var(--f-display);margin:0}
+.muted{color:var(--ink-2)}
+.small{font-size:12.5px}
+label.field{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--ink-2)}
+input[type=text],input[type=number],select{font:14px var(--f-body);color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:7px;padding:7px 9px;width:100%;min-width:0}
+input.mono{font-family:var(--f-mono)}
+input:focus-visible,select:focus-visible,button:focus-visible,.drop:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+button{font:600 13.5px var(--f-body);border-radius:7px;border:1px solid var(--line);background:var(--sheet);color:var(--ink);padding:8px 12px;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+button:hover{border-color:var(--accent)}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+button.primary:hover{filter:brightness(1.08)}
+button.ghost{background:transparent}
+button:disabled{opacity:.5;cursor:not-allowed}
+.drop{display:block;border:1.5px dashed var(--line);border-radius:var(--r);padding:18px;text-align:center;cursor:pointer;background:var(--paper);transition:border-color .15s,background .15s}
+.drop:hover,.drop.over{border-color:var(--accent);background:var(--accent-soft)}
+.drop input{position:absolute;opacity:0;width:1px;height:1px}
+.drop strong{display:block;font:600 15px var(--f-display)}
+.drop .muted{font-size:12.5px}
+.status{font-size:13px;margin-top:10px;display:flex;gap:8px;align-items:center;min-height:20px}
+.spin{width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:sp 0.8s linear infinite;flex:none}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation:none}}
+.callout{border-radius:8px;padding:10px 12px;font-size:13px;display:flex;flex-direction:column;gap:8px}
+.callout.warn{background:var(--warn-soft);color:var(--warn)}
+.callout.bad{background:var(--bad-soft);color:var(--bad)}
+.callout.ok{background:var(--ok-soft);color:var(--ok)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:end}
+.row > *{min-width:0}
+table.pav{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+table.pav th{font:600 11px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2);text-align:left;padding:4px 4px 6px}
+table.pav td{padding:3px 4px}
+table.pav input{padding:5px 7px}
+.iconbtn{padding:5px 8px;font-size:13px}
+.overview{margin-top:12px;border:1px solid var(--line-2);border-radius:8px;background:var(--paper);overflow:hidden}
+.overview svg{display:block;width:100%;height:auto;max-height:340px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font:600 12px var(--f-mono);padding:4px 8px;border-radius:999px;background:var(--accent-soft);color:var(--accent)}
+.chip.ok{background:var(--ok-soft);color:var(--ok)}
+.chip.warn{background:var(--warn-soft);color:var(--warn)}
+.chip.bad{background:var(--bad-soft);color:var(--bad)}
+.issues{display:flex;flex-direction:column;gap:10px;margin-top:12px}
+.issue{border-left:3px solid var(--warn);padding:2px 0 2px 10px}
+.issue.bad{border-color:var(--bad)} .issue.info{border-color:var(--line)}
+.issue h3{font:600 13.5px var(--f-body);margin:0 0 4px}
+.codes{font:500 12.5px/1.7 var(--f-mono);color:var(--ink-2);word-break:break-word}
+.fix{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px}
+.fix select{width:auto}
+.fix .code{font:700 13px var(--f-mono)}
+details{border-top:1px solid var(--line-2);padding-top:10px;margin-top:12px}
+details > summary{cursor:pointer;font:600 13.5px var(--f-body);list-style:none;display:flex;align-items:center;gap:6px}
+details > summary::before{content:"";width:6px;height:6px;border-right:2px solid var(--ink-2);border-bottom:2px solid var(--ink-2);transform:rotate(-45deg);transition:transform .15s}
+details[open] > summary::before{transform:rotate(45deg)}
+.layers{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:10px}
+@media (max-width:520px){.layers{grid-template-columns:minmax(0,1fr)}}
+.layers fieldset{border:1px solid var(--line-2);border-radius:8px;padding:8px;margin:0;min-width:0;max-height:220px;overflow:auto}
+.layers legend{font:600 11px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2);padding:0 4px}
+.layers label{display:flex;gap:6px;align-items:center;font-size:12.5px;padding:2px 0;word-break:break-all}
+.layers label span.n{margin-left:auto;color:var(--ink-2);font:500 11px var(--f-mono)}
+.tabs{display:flex;gap:4px;flex-wrap:wrap}
+.tab{border-radius:999px;padding:6px 12px;font:600 13px var(--f-mono)}
+.tab[aria-selected="true"]{background:var(--ink);color:var(--sheet);border-color:var(--ink)}
+.viewer-head{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center;margin-bottom:12px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;border-radius:0;padding:6px 12px}
+.seg button[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent)}
+.sheetbox{background:var(--line-2);border-radius:8px;padding:clamp(8px,2vw,24px);display:flex;justify-content:center}
+.sheetbox svg{background:#fff;box-shadow:0 1px 2px rgba(10,20,40,.12),0 8px 24px rgba(10,20,40,.10);width:100%;max-width:640px;height:auto;aspect-ratio:297/420}
+.xbox{fill:transparent;stroke:none;cursor:pointer}
+.xbox:hover{fill:rgba(38,56,255,.10)}
+.xbox.sel{fill:rgba(38,56,255,.16);stroke:#2638ff;stroke-width:.6;stroke-dasharray:1.5 1}
+.dl{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;align-items:center}
+.dl .fname{font:500 12px var(--f-mono);color:var(--ink-2);word-break:break-all}
+.empty{display:flex;flex-direction:column;gap:16px}
+.empty .mock{background:var(--line-2);border-radius:8px;padding:24px;display:flex;justify-content:center}
+.empty .mock svg{width:100%;max-width:300px;height:auto;background:#fff;box-shadow:0 8px 24px rgba(10,20,40,.10)}
+.steps3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+@media (max-width:620px){.steps3{grid-template-columns:minmax(0,1fr)}}
+.steps3 div{border-top:2px solid var(--accent);padding-top:8px;font-size:13px;color:var(--ink-2)}
+.steps3 b{display:block;color:var(--ink);font:600 14px var(--f-display);margin-bottom:2px}
+.names{font:500 12.5px var(--f-mono);background:var(--paper);border:1px solid var(--line-2);border-radius:8px;padding:10px 12px;color:var(--ink-2);overflow-x:auto;white-space:nowrap}
+.names em{color:var(--accent);font-style:normal}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--sheet);padding:10px 14px;border-radius:8px;font-size:13.5px;box-shadow:0 8px 24px rgba(0,0,0,.2);max-width:calc(100% - 32px);z-index:20}
+.check{display:flex;gap:8px;align-items:center;font-size:13px}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <h1>Κατόψεις Stand<small>Από το DWG της έκθεσης σε καθαρή κάτοψη A3 για κάθε περίπτερο</small></h1>
+    <div class="privacy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>Το DWG επεξεργάζεται μόνο στον υπολογιστή σας και δεν ανεβαίνει πουθενά.</div>
+  </header>
+
+  <div class="grid">
+    <div class="col">
+      <section class="card" id="s1">
+        <div class="step"><b>01</b><h2>Σχέδιο DWG</h2></div>
+        <label class="drop" id="drop1">
+          <input type="file" id="file1" accept=".dwg">
+          <strong>Επιλέξτε ή σύρετε εδώ το DWG</strong>
+          <span class="muted">Από AutoCAD ή ActCAD, μορφή DWG 2000 έως 2018+.</span>
+        </label>
+        <div class="status" id="status1"></div>
+        <div id="xrefBox" hidden></div>
+        <div id="nameBox" hidden style="margin-top:12px">
+          <label class="field">Όνομα έκθεσης (μπαίνει στην αρχή κάθε αρχείου)
+            <input type="text" id="exName" class="mono" autocomplete="off" spellcheck="false">
+          </label>
+        </div>
+      </section>
+
+      <section class="card" id="s2" hidden>
+        <div class="step"><b>02</b><h2>Περίπτερα</h2></div>
+        <p class="small muted" style="margin:0 0 10px">Βρέθηκαν από τις ετικέτες «ΠΕΡΙΠΤΕΡΟ» του σχεδίου. Κάθε stand πηγαίνει στο περίπτερο όπου πέφτει το κέντρο του. Αλλάξτε τα όρια αν χρειάζεται.</p>
+        <table class="pav"><thead><tr><th>Περίπτερο</th><th>Από</th><th>Έως</th><th></th></tr></thead><tbody id="pavRows"></tbody></table>
+        <div class="row" style="margin-top:8px">
+          <button class="ghost iconbtn" id="addPav" type="button">+ Περίπτερο</button>
+          <button class="ghost iconbtn" id="autoPav" type="button">Αυτόματα</button>
+          <label class="field" style="flex-direction:row;align-items:center;gap:6px;margin-left:auto">Χωρισμός κατά
+            <select id="axis" style="width:auto"><option value="y">ύψος (Y)</option><option value="x">πλάτος (X)</option></select>
+          </label>
+        </div>
+        <div class="overview" id="overview"></div>
+      </section>
+
+      <section class="card" id="s3" hidden>
+        <div class="step"><b>03</b><h2>Έλεγχος</h2></div>
+        <div class="chips" id="chips"></div>
+        <div class="issues" id="issues"></div>
+        <details id="renameBox">
+          <summary>Αλλαγή κωδικού</summary>
+          <p class="small muted" style="margin:8px 0">Αν ο νέος κωδικός υπάρχει ήδη στο περίπτερο, οι δύο ανταλλάσσονται για να μη βγουν διπλοί.</p>
+          <div class="row">
+            <label class="field" style="width:90px">Περίπτερο<select id="rnPav"></select></label>
+            <label class="field" style="width:90px">Από<input type="text" id="rnFrom" class="mono" autocomplete="off"></label>
+            <label class="field" style="width:90px">Σε<input type="text" id="rnTo" class="mono" autocomplete="off"></label>
+            <button type="button" id="rnAdd">Αλλαγή</button>
+          </div>
+          <div class="codes" id="rnList" style="margin-top:8px"></div>
+        </details>
+        <details id="layerBox">
+          <summary>Layers και κανόνες</summary>
+          <div class="layers" id="layers"></div>
+          <label class="check" style="margin-top:10px"><input type="checkbox" id="padOn" checked> Κωδικοί πάντα με δύο ψηφία (E1 → E01, 1A → 01A)</label>
+          <div class="row" style="margin-top:10px"><button type="button" id="applyLayers" class="primary">Επανυπολογισμός</button></div>
+        </details>
+      </section>
+    </div>
+
+    <div class="col">
+      <section class="card" id="viewer">
+        <div id="emptyState" class="empty">
+          <div class="step"><b>A3</b><h2>Τι θα πάρετε</h2></div>
+          <div class="steps3">
+            <div><b>Ανεβάζετε το DWG</b>Όπως βγαίνει από το AutoCAD. Αν το κτίριο είναι σε άλλο αρχείο, θα σας το ζητήσει.</div>
+            <div><b>Ελέγχετε</b>Περίπτερα, κωδικοί και stand βρίσκονται αυτόματα. Διορθώνετε μόνο ό,τι επισημανθεί.</div>
+            <div><b>Κατεβάζετε</b>Μία κάτοψη A3 για κάθε περίπτερο, σε δύο εκδοχές.</div>
+          </div>
+          <div class="names">ΕΚΘΕΣΗ_Periptero_<em>08</em>_XARTHS.pdf &nbsp;·&nbsp; μαύρο, διανυσματικό<br>ΕΚΘΕΣΗ_Periptero_<em>08</em>_GALAXY.jpg &nbsp;·&nbsp; μπλε stand, 300 dpi</div>
+          <div class="mock" aria-hidden="true">
+            <svg viewBox="0 0 297 420"><g fill="none" stroke="#111" stroke-width=".6"><path d="M40 60h217v300H40z"/><path d="M44 64h209v292H44z"/><path d="M120 360v-6M180 360v-6"/></g>
+            <g fill="none" stroke="#2638ff" stroke-width=".9"><path d="M60 80h40v30H60zM100 80h40v30h-40zM170 80h70v30h-70zM60 140h30v60H60zM120 140h40v30h-40zM120 170h40v30h-40zM190 140h50v60h-50zM60 230h80v40H60zM170 230h35v40h-35zM205 230h35v40h-35zM60 300h40v40H60zM120 300h60v40h-60zM200 300h40v40h-40z"/></g>
+            <g font-family="Helvetica,Arial,sans-serif" font-weight="700" font-size="9" text-anchor="middle" fill="#111"><text x="80" y="98">A01</text><text x="120" y="98">A02</text><text x="205" y="98">A03</text><text x="75" y="173">B04</text><text x="140" y="158">B05</text><text x="140" y="188">B06</text><text x="215" y="173">C07</text><text x="100" y="253">C08</text><text x="187" y="253">C09</text><text x="222" y="253">C10</text><text x="80" y="323">D11</text><text x="150" y="323">D12</text><text x="220" y="323">D13</text></g></svg>
+          </div>
+          <p class="small muted" style="margin:0">Το σχήμα είναι ενδεικτικό. Η πραγματική κάτοψη εμφανίζεται εδώ μόλις ανεβάσετε το DWG.</p>
+        </div>
+        <div id="sheetView" hidden>
+          <div class="viewer-head">
+            <div class="tabs" id="tabs" role="tablist"></div>
+            <div class="seg" role="group" aria-label="Εκδοχή">
+              <button type="button" id="vBlue" aria-pressed="true">Μπλε</button>
+              <button type="button" id="vBlack" aria-pressed="false">Μαύρο</button>
+            </div>
+          </div>
+          <div class="sheetbox" id="sheet"></div>
+          <div class="callout" id="xEdit" hidden style="margin-top:12px;background:var(--accent-soft);color:var(--ink)"></div>
+          <div class="dl">
+            <button type="button" class="primary" id="dlPdf">Λήψη PDF</button>
+            <button type="button" id="dlJpg">Λήψη JPG</button>
+            <button type="button" id="dlZip">Όλα σε ZIP</button>
+          </div>
+          <div class="dl"><span class="fname" id="fnames"></span></div>
+          <div class="callout warn" id="noDl" hidden style="margin-top:10px">Σε αυτή την προβολή τα αρχεία δεν κατεβαίνουν αυτόματα. Το JPG μπορείτε να το πάρετε με «Λήψη JPG» και δεξί κλικ στην εικόνα. Για PDF και ZIP ανοίξτε τη σελίδα συνδεδεμένοι στο claude.ai.</div>
+          <div class="callout warn" id="fallback" hidden style="margin-top:10px"></div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/jsts@2.11.0/dist/jsts.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+/*__CORE__*/
+</script>
+<script type="module">
+/*__DWG__*/
+window.__DWG = { LibreDwg, Dwg_File_Type, createModule };
+window.dispatchEvent(new Event('dwg-ready'));
+</script>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const st = { host: null, sv: null, xrefNeed: [], xrefs: [], G: null, cfg: null, res: null, rep: null, pav: null, variant: 'GALAXY', layouts: {}, fileName: '' };
+  let lib = null, dl = null;
+
+  // ---------- capabilities ----------
+  // the viewer may attach window.claude after this script runs: keep looking for a while, and again on every click
+  let dlChecked = false, dlPromise = null;
+  function getDl() {
+    if (dl) return Promise.resolve(dl);
+    if (dlPromise) return dlPromise;
+    if (dlChecked && !(window.claude && typeof window.claude.use === 'function')) return Promise.resolve(null);
+    dlPromise = (async () => {
+      for (let i = 0; i < 60 && !dl; i++) {
+        if (window.claude && typeof window.claude.use === 'function') { try { dl = await window.claude.use('downloads'); } catch (e) { dl = null; } break; }
+        await new Promise(r => setTimeout(r, 250));
+      }
+      dlChecked = true; dlPromise = null; updateDl(); return dl;
+    })();
+    return dlPromise;
+  }
+  if (!window.__STANDALONE) getDl();
+  function updateDl() {
+    if (window.__STANDALONE) { ['dlPdf', 'dlJpg', 'dlZip'].forEach(id => $(id).disabled = !st.res); $('noDl').hidden = true; return; } ['dlPdf', 'dlJpg', 'dlZip'].forEach(id => $(id).disabled = !st.res); $('noDl').hidden = !!dl || !dlChecked || !st.res; }
+
+  const toast = msg => { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toast._t); toast._t = setTimeout(() => t.hidden = true, 3200); };
+  const status = (el, msg, busy) => { el.innerHTML = ''; if (busy) { const s = document.createElement('span'); s.className = 'spin'; el.appendChild(s); } const t = document.createElement('span'); t.textContent = msg; el.appendChild(t); };
+  const tick = () => new Promise(r => setTimeout(r, 20));
+
+  async function getLib() {
+    if (lib) return lib;
+    if (!window.__DWG) await new Promise(r => window.addEventListener('dwg-ready', r, { once: true }));
+    if (window.__WASM_B64) {
+      const bin = Uint8Array.from(atob(window.__WASM_B64), c => c.charCodeAt(0));
+      lib = window.__DWG.LibreDwg.createByWasmInstance(await window.__DWG.createModule({ wasmBinary: bin }));
+    } else lib = await window.__DWG.LibreDwg.create('.');
+    return lib;
+  }
+  const DWGV = { AC1009: 'R12', AC1012: 'R13', AC1014: 'R14', AC1015: '2000', AC1018: '2004', AC1021: '2007', AC1024: '2010', AC1027: '2013', AC1032: '2018' };
+  async function dwgVersion(file) { try { const t = new TextDecoder('ascii').decode(await file.slice(0, 6).arrayBuffer()); return DWGV[t] ? 'DWG ' + DWGV[t] : (t.startsWith('AC') ? t : null); } catch (e) { return null; } }
+  const SAVEAS = 'Στο AutoCAD ή στο ActCAD ανοίξτε το σχέδιο και κάντε «Αποθήκευση ως» σε μορφή DWG 2013 ή 2018, και ανεβάστε το ξανά.';
+  async function readDwg(file) {
+    const L = await getLib();
+    const buf = await file.arrayBuffer();
+    if (!/^AC10/.test(new TextDecoder('ascii').decode(new Uint8Array(buf, 0, 6)))) throw new Error('notdwg');
+    const data = L.dwg_read_data(buf, window.__DWG.Dwg_File_Type.DWG);
+    if (data === undefined || data === null) throw new Error('read');
+    const db = L.convert(data);
+    try { L.dwg_free(data); } catch (e) {}
+    return db;
+  }
+
+  // ---------- step 1 ----------
+  function wireDrop(dropEl, inputEl, onFile) {
+    inputEl.addEventListener('change', () => inputEl.files[0] && onFile(inputEl.files[0]));
+    dropEl.addEventListener('dragover', e => { e.preventDefault(); dropEl.classList.add('over'); });
+    dropEl.addEventListener('dragleave', () => dropEl.classList.remove('over'));
+    dropEl.addEventListener('drop', e => { e.preventDefault(); dropEl.classList.remove('over'); const f = e.dataTransfer.files[0]; if (f) onFile(f); });
+  }
+  wireDrop($('drop1'), $('file1'), async file => {
+    const s1 = $('status1');
+    if (!/\.dwg$/i.test(file.name)) { status(s1, 'Το αρχείο πρέπει να είναι .dwg.'); return; }
+    st.fileName = file.name; st.xrefs = []; st.cfg = null; st.res = null; st.layouts = {};
+    try {
+      status(s1, lib ? 'Ανάγνωση σχεδίου…' : 'Φόρτωση αναγνώστη DWG (μία φορά, ~11 MB)…', true); await tick();
+      await getLib(); status(s1, 'Ανάγνωση σχεδίου…', true); await tick();
+      st.version = await dwgVersion(file);
+      st.host = await readDwg(file);
+      st.sv = FP.survey(st.host);
+      $('exName').value = file.name.replace(/\.dwg$/i, '').replace(/^[0-9a-f]{6,}[-_]+/i, '');
+      $('nameBox').hidden = false;
+      st.xrefNeed = st.sv.xrefs.slice();
+      renderXref();
+      if (st.xrefNeed.length) { status(s1, 'Διαβάστηκε. Χρειάζεται και το αρχείο του κτιρίου.'); return; }
+      await analyze(true);
+    } catch (e) { console.error(e); status(s1, (e && e.message === 'notdwg') ? 'Το αρχείο δεν είναι σχέδιο DWG.' : `Δεν μπόρεσα να διαβάσω το σχέδιο${st.version ? ' (' + st.version + ')' : ''}. ${SAVEAS}`); }
+  });
+  function renderXref() {
+    const box = $('xrefBox'); box.innerHTML = '';
+    const pending = st.xrefNeed.filter(x => !st.xrefs.some(y => y.name === x.name));
+    box.hidden = !pending.length; if (!pending.length) return;
+    for (const x of pending) {
+      const c = document.createElement('div'); c.className = 'callout warn'; c.style.marginTop = '12px';
+      c.innerHTML = `<div>Το κτίριο (τοίχοι, πόρτες, σκάλες) είναι σε ξεχωριστό αρχείο που λείπει: <b style="font-family:var(--f-mono)"></b>. Ανεβάστε το εδώ, ή στο AutoCAD κάντε <b>Bind</b> στο xref και ανεβάστε ξανά το σχέδιο.</div>`;
+      c.querySelector('b').textContent = x.name + '.dwg';
+      const lab = document.createElement('label'); lab.className = 'drop'; lab.innerHTML = '<input type="file" accept=".dwg"><strong>Αρχείο κτιρίου</strong><span class="muted">' + x.name + '.dwg</span>';
+      const skip = document.createElement('button'); skip.type = 'button'; skip.className = 'ghost iconbtn'; skip.textContent = 'Συνέχεια χωρίς τοίχους';
+      skip.onclick = () => { st.xrefNeed = st.xrefNeed.filter(y => y !== x); renderXref(); analyze(true); };
+      c.append(lab, skip); box.appendChild(c);
+      wireDrop(lab, lab.querySelector('input'), async f => {
+        try { status($('status1'), 'Ανάγνωση αρχείου κτιρίου…', true); await tick();
+          const db = await readDwg(f); st.xrefs.push({ name: x.name, db, offset: x.offset, scale: x.scale, rotation: x.rotation });
+          renderXref(); if (!st.xrefNeed.some(y => !st.xrefs.some(z => z.name === y.name))) await analyze(true);
+        } catch (e) { status($('status1'), 'Δεν μπόρεσα να διαβάσω το αρχείο του κτιρίου.'); }
+      });
+    }
+  }
+
+  // ---------- analysis ----------
+  async function analyze(fresh) {
+    const s1 = $('status1');
+    status(s1, 'Εντοπισμός stand…', true); await tick();
+    st.G = FP.loadGeometry({ db: st.host, ms: st.sv.ms }, st.xrefs);
+    if (fresh || !st.cfg) {
+      const g = FP.guessLayers(st.sv);
+      for (const x of st.xrefs) { const gx = FP.guessLayers(FP.survey(x.db)); g.wall = [...new Set(g.wall.concat(gx.wall))]; }
+      st.cfg = { stand_layers: g.stand, wall_layers: g.wall, number_layers: g.number, pad_digits: 2, splits: [], renames: [], axis: 'y' };
+      st.cfg.building = FP.guessBuilding(st.G, st.cfg);
+      let res = FP.detect(st.G, st.cfg);
+      const bad = r => r.unmatched.length + r.stands.filter(s => s.code.includes('/')).length;
+      if (bad(res) > 0 && !st.cfg.stand_layers.includes('0') && st.sv.layers.some(L => L.name === '0')) {
+        const c2 = { ...st.cfg, stand_layers: st.cfg.stand_layers.concat('0') };
+        const r2 = FP.detect(st.G, c2); if (bad(r2) < bad(res)) { res = r2; st.cfg = c2; }
+      }
+      st.res = res;
+      st.cfg.pavilions = FP.guessPavilions(res, st.cfg, st.cfg.axis);
+      // no "ΠΕΡΙΠΤΕΡΟ" label in the drawing: take the pavilion number from the file name (HALL_13.dwg -> 13)
+      if (st.cfg.pavilions.length === 1 && !res.pavLabels.length) { const m = st.fileName.replace(/\.dwg$/i, '').match(/(?:^|[^0-9])(\d{1,3})(?=$|[^0-9])/); if (m) st.cfg.pavilions[0].name = m[1].padStart(2, '0'); }
+      renderLayers();
+    } else {
+      st.res = FP.detect(st.G, st.cfg);
+    }
+    st.rep = FP.assign(st.res, st.cfg);
+    st.layouts = {};
+    if (!st.res.stands.length) { status(s1, `Δεν βρέθηκαν stand${st.version ? ' (' + st.version + ')' : ''}. Ελέγξτε στο «Layers και κανόνες» ποια layers έχουν τα stand και τους κωδικούς. Αν τα layers φαίνονται σωστά: ${SAVEAS}`); $('s2').hidden = false; $('s3').hidden = false; $('layerBox').open = true; renderReport(); return; }
+    status(s1, `Βρέθηκαν ${st.res.stands.length} stand σε ${st.cfg.pavilions.length} ${st.cfg.pavilions.length === 1 ? 'περίπτερο' : 'περίπτερα'}${st.version ? ' · ' + st.version : ''}.`);
+    $('s2').hidden = false; $('s3').hidden = false;
+    renderPavs(); renderOverview(); renderReport();
+    if (!st.cfg.pavilions.some(p => p.name === st.pav)) st.pav = st.cfg.pavilions[0]?.name;
+    renderTabs(); await renderSheet(); updateDl();
+  }
+  async function reassign() { st.rep = FP.assign(st.res, st.cfg); st.layouts = {}; renderOverview(); renderReport(); if (!st.cfg.pavilions.some(p => p.name === st.pav)) st.pav = st.cfg.pavilions[0]?.name; renderTabs(); await renderSheet(); updateDl(); }
+
+  // ---------- step 2: pavilions ----------
+  function renderPavs() {
+    const tb = $('pavRows'); tb.innerHTML = '';
+    st.cfg.pavilions.forEach((P, i) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td><input type="text" class="mono" value="${P.name}" aria-label="Όνομα περιπτέρου"></td><td><input type="number" step="0.1" value="${(+P.min).toFixed(1)}" aria-label="Από"></td><td><input type="number" step="0.1" value="${(+P.max).toFixed(1)}" aria-label="Έως"></td><td><button type="button" class="ghost iconbtn" aria-label="Αφαίρεση">✕</button></td>`;
+      const [n, a, b] = tr.querySelectorAll('input');
+      n.onchange = () => { P.name = n.value.trim() || P.name; reassign(); };
+      a.onchange = () => { P.min = +a.value; if (i > 0) st.cfg.pavilions[i - 1].max = P.min; renderPavs(); reassign(); };
+      b.onchange = () => { P.max = +b.value; if (i + 1 < st.cfg.pavilions.length) st.cfg.pavilions[i + 1].min = P.max; renderPavs(); reassign(); };
+      tr.querySelector('button').onclick = () => { if (st.cfg.pavilions.length < 2) return; const rm = st.cfg.pavilions.splice(i, 1)[0]; if (i > 0) st.cfg.pavilions[i - 1].max = rm.max; else st.cfg.pavilions[0].min = rm.min; renderPavs(); reassign(); };
+      tb.appendChild(tr);
+    });
+    $('axis').value = st.cfg.axis; renderRnPav();
+  }
+  $('addPav').onclick = () => { const L = st.cfg.pavilions[st.cfg.pavilions.length - 1]; const mid = +((L.min + L.max) / 2).toFixed(1); st.cfg.pavilions.push({ name: String(st.cfg.pavilions.length + 1).padStart(2, '0'), min: mid, max: L.max }); L.max = mid; renderPavs(); reassign(); };
+  $('autoPav').onclick = () => { st.cfg.pavilions = FP.guessPavilions(st.res, st.cfg, st.cfg.axis); renderPavs(); reassign(); };
+  $('axis').onchange = () => { st.cfg.axis = $('axis').value; st.cfg.pavilions = FP.guessPavilions(st.res, st.cfg, st.cfg.axis); renderPavs(); reassign(); };
+
+  function renderOverview() {
+    const [x0, y0, x1, y1] = st.cfg.building, W = x1 - x0, H = y1 - y0;
+    const sx = v => (v - x0), sy = v => (y1 - v);
+    const svgNS = 'http://www.w3.org/2000/svg';
+    let s = `<svg xmlns="${svgNS}" viewBox="-2 -2 ${W + 4} ${H + 4}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Κάτοψη με όρια περιπτέρων">`;
+    st.cfg.pavilions.forEach((P, i) => {
+      const fill = i % 2 ? 'var(--band-b)' : 'var(--band-a)';
+      if (st.cfg.axis === 'y') s += `<rect x="0" y="${sy(P.max)}" width="${W}" height="${P.max - P.min}" fill="${fill}"/><text x="${W - 1}" y="${sy(P.max) + 4}" text-anchor="end" font-size="${Math.max(2.5, W / 18)}" font-family="JetBrains Mono,monospace" font-weight="700" fill="var(--accent)">${P.name}</text>`;
+      else s += `<rect x="${sx(P.min)}" y="0" width="${P.max - P.min}" height="${H}" fill="${fill}"/><text x="${sx(P.min) + 1}" y="${Math.max(3, W / 18)}" font-size="${Math.max(2.5, W / 18)}" font-family="JetBrains Mono,monospace" font-weight="700" fill="var(--accent)">${P.name}</text>`;
+    });
+    const sw = Math.max(W, H) / 900;
+    let d = '';
+    for (const pts of st.res.WG) { if (!pts.some(p => p[0] >= x0 && p[0] <= x1 && p[1] >= y0 && p[1] <= y1)) continue; d += 'M' + pts.map(p => sx(p[0]).toFixed(2) + ' ' + sy(p[1]).toFixed(2)).join('L'); }
+    s += `<path d="${d}" fill="none" stroke="var(--ink-2)" stroke-width="${sw}"/>`;
+    let d2 = '';
+    for (const st2 of st.res.stands) d2 += 'M' + st2.poly.getExteriorRing().getCoordinates().map(c => sx(c.x).toFixed(2) + ' ' + sy(c.y).toFixed(2)).join('L') + 'Z';
+    s += `<path d="${d2}" fill="none" stroke="var(--accent)" stroke-width="${sw * 1.6}"/>`;
+    st.cfg.pavilions.forEach((P, i) => { if (i === 0) return; if (st.cfg.axis === 'y') s += `<line x1="0" x2="${W}" y1="${sy(P.min)}" y2="${sy(P.min)}" stroke="var(--accent)" stroke-dasharray="${sw * 6} ${sw * 4}" stroke-width="${sw * 2}"/>`; else s += `<line y1="0" y2="${H}" x1="${sx(P.min)}" x2="${sx(P.min)}" stroke="var(--accent)" stroke-dasharray="${sw * 6} ${sw * 4}" stroke-width="${sw * 2}"/>`; });
+    s += '</svg>';
+    $('overview').innerHTML = s;
+  }
+
+  // ---------- step 3: report & fixes ----------
+  function renderReport() {
+    const rep = st.rep, chips = $('chips'); chips.innerHTML = '';
+    for (const p of rep.pavs) { const c = document.createElement('span'); c.className = 'chip'; c.textContent = `Περ. ${p.name} · ${p.codes.length} stand`; chips.appendChild(c); }
+    const probs = rep.unmatched.length + rep.merged.length + rep.dups.length + rep.noPav.length;
+    const c = document.createElement('span'); c.className = 'chip ' + (probs ? 'warn' : 'ok'); c.textContent = probs ? `${probs} για έλεγχο` : 'Χωρίς εκκρεμότητες'; chips.appendChild(c);
+    const box = $('issues'); box.innerHTML = '';
+    const add = (cls, title, html) => { const d = document.createElement('div'); d.className = 'issue ' + cls; d.innerHTML = `<h3></h3>`; d.querySelector('h3').textContent = title; if (html) d.appendChild(html); box.appendChild(d); return d; };
+    const codesEl = list => { const p = document.createElement('div'); p.className = 'codes'; p.textContent = list.join('  '); return p; };
+    if (rep.merged.length) {
+      const wrap = document.createElement('div');
+      const p = document.createElement('p'); p.className = 'small muted'; p.style.margin = '0 0 4px'; p.textContent = 'Στο σχέδιο δεν υπάρχει γραμμή ανάμεσά τους. Χωρίστε το stand στη μέση:'; wrap.appendChild(p);
+      for (const m of rep.merged) {
+        const codes = m.code.split('/'); const f = document.createElement('div'); f.className = 'fix';
+        f.innerHTML = `<span class="code"></span><select aria-label="Τρόπος χωρισμού"><option value="vertical">πάνω / κάτω</option><option value="horizontal">αριστερά / δεξιά</option></select><select aria-label="Σειρά"></select><button type="button">Χωρισμός</button>`;
+        f.querySelector('.code').textContent = codes.join(' + ');
+        const [dir, ord] = f.querySelectorAll('select');
+        const fillOrd = () => { const v = dir.value === 'vertical'; ord.innerHTML = ''; [codes, codes.slice().reverse()].forEach((cs, i) => { const o = document.createElement('option'); o.value = i; o.textContent = v ? `${cs[0]} κάτω, ${cs[cs.length - 1]} πάνω` : `${cs[0]} αριστερά, ${cs[cs.length - 1]} δεξιά`; ord.appendChild(o); }); };
+        dir.onchange = fillOrd; fillOrd();
+        f.querySelector('button').onclick = async () => { const cs = ord.value === '1' ? codes.slice().reverse() : codes; st.cfg.splits.push({ codes: cs, direction: dir.value }); await analyze(false); toast('Το stand χωρίστηκε.'); };
+        wrap.appendChild(f);
+      }
+      add('bad', 'Stand με δύο κωδικούς', wrap);
+    }
+    if (rep.unmatched.length) add('bad', 'Κωδικοί χωρίς stand', codesEl(rep.unmatched.map(u => u.code)));
+    if (rep.dups.length) add('bad', 'Ίδιος κωδικός δύο φορές στο ίδιο περίπτερο', codesEl(rep.dups.map(d => `${d.code} (Περ. ${d.pav})`)));
+    if (rep.noPav.length) add('warn', 'Stand έξω από τα όρια περιπτέρων', codesEl(rep.noPav));
+    const near = rep.pavs.filter(p => p.near.length);
+    if (near.length) { const w = document.createElement('div'); for (const p of near) { const e = codesEl([`Περ. ${p.name}:`, ...p.near]); w.appendChild(e); } add('info', 'Stand κοντά στο όριο περιπτέρων (ελέγξτε ότι είναι στο σωστό)', w); }
+    if (st.res.extra.length) { const n = Object.keys(st.cfg.extra_labels || {}).length; const p = document.createElement('div'); p.className = 'small muted'; p.textContent = 'Κάντε κλικ σε ένα κενό κουτί στην κάτοψη για να γράψετε μέσα αριθμό stand ή κείμενο.' + (n ? ` Συμπληρωμένα: ${n}.` : ''); add('info', `${st.res.extra.length} κενά κουτιά χωρίς κωδικό`, p); }
+    renderRnList();
+  }
+  function renderRnPav() { const s = $('rnPav'); const v = s.value; s.innerHTML = ''; for (const P of st.cfg.pavilions) { const o = document.createElement('option'); o.value = P.name; o.textContent = P.name; s.appendChild(o); } if (v) s.value = v; }
+  function renderRnList() {
+    const L = $('rnList'); L.innerHTML = '';
+    st.cfg.renames.forEach((r, i) => { const d = document.createElement('div'); d.style.display = 'flex'; d.style.gap = '8px'; d.style.alignItems = 'center'; const t = document.createElement('span'); t.textContent = `Περ. ${r.pav}: ${r.from} → ${r.to}`; const b = document.createElement('button'); b.type = 'button'; b.className = 'ghost iconbtn'; b.textContent = 'Αναίρεση'; b.onclick = () => { st.cfg.renames.splice(i, 1); analyze(false); }; d.append(t, b); L.appendChild(d); });
+  }
+  $('rnAdd').onclick = async () => {
+    const pav = $('rnPav').value, from = FP.typedCode($('rnFrom').value.trim(), st.cfg.pad_digits), to = FP.typedCode($('rnTo').value.trim(), st.cfg.pad_digits);
+    if (!from || !to || from === to) { toast('Συμπληρώστε τον παλιό και τον νέο κωδικό.'); return; }
+    const codes = (st.rep.pavs.find(p => p.name === pav) || { codes: [] }).codes;
+    if (!codes.includes(from)) { toast(`Ο κωδικός ${from} δεν υπάρχει στο περίπτερο ${pav}.`); return; }
+    st.cfg.renames.push({ pav, from, to });
+    if (codes.includes(to)) st.cfg.renames.push({ pav, from: to, to: from });
+    $('rnFrom').value = ''; $('rnTo').value = '';
+    await analyze(false); toast(codes.includes(to) ? `Ανταλλαγή ${from} ↔ ${to}` : `${from} → ${to}`);
+  };
+
+  function renderLayers() {
+    const box = $('layers'); box.innerHTML = '';
+    const groups = [['stand_layers', 'Stand', L => L.geo > 0], ['number_layers', 'Κωδικοί', L => L.texts.length > 0 || (L.attrs || []).length > 0], ['wall_layers', 'Τοίχοι', L => L.geo > 0]];
+    const all = st.sv.layers.slice();
+    for (const x of st.xrefs) for (const L of FP.survey(x.db).layers) if (!all.some(a => a.name === L.name)) all.push({ ...L, xref: true });
+    for (const [key, title, f] of groups) {
+      const fs = document.createElement('fieldset'); fs.innerHTML = `<legend>${title}</legend>`;
+      const list = all.filter(f).sort((a, b) => (st.cfg[key].includes(b.name) - st.cfg[key].includes(a.name)) || a.name.localeCompare(b.name));
+      for (const L of list) {
+        const lab = document.createElement('label'); const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = st.cfg[key].includes(L.name); cb.dataset.key = key; cb.value = L.name;
+        const nm = document.createElement('span'); nm.textContent = L.name; const n = document.createElement('span'); n.className = 'n'; n.textContent = key === 'number_layers' ? L.texts.length + (L.attrs || []).length : L.geo;
+        lab.append(cb, nm, n); fs.appendChild(lab);
+      }
+      box.appendChild(fs);
+    }
+    $('padOn').checked = st.cfg.pad_digits > 0;
+  }
+  $('applyLayers').onclick = async () => {
+    for (const key of ['stand_layers', 'number_layers', 'wall_layers']) st.cfg[key] = [...document.querySelectorAll(`#layers input[data-key="${key}"]:checked`)].map(c => c.value);
+    st.cfg.pad_digits = $('padOn').checked ? 2 : 0;
+    st.cfg.building = FP.guessBuilding(st.G, st.cfg);
+    await analyze(false); toast('Ο υπολογισμός έγινε ξανά.');
+  };
+
+  // ---------- sheet: layout + renderers ----------
+  const mcan = document.createElement('canvas').getContext('2d');
+  const FONT_B64 = '/*__FONTB64__*/';
+  const FONT = '"StandSans", Arial, Helvetica, sans-serif';
+  (() => { const st0 = document.createElement('style'); st0.textContent = `@font-face{font-family:"StandSans";font-weight:700;src:url(data:font/ttf;base64,${FONT_B64}) format("truetype")}`; document.head.appendChild(st0); })();
+  let fontReady = null;
+  const ensureFont = () => fontReady || (fontReady = (document.fonts && document.fonts.load ? document.fonts.load('700 40px "StandSans"', 'B08Αα').catch(() => {}) : Promise.resolve()));
+  const esc = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  function measure(t) { mcan.font = `700 100px ${FONT}`; const m = mcan.measureText(t); return { w: m.width / 100, h: (m.actualBoundingBoxAscent + m.actualBoundingBoxDescent) / 100 || 0.72 }; }
+  function getLayout(pav) { if (!st.layouts[pav]) st.layouts[pav] = FP.layout(st.res, st.cfg, pav, measure); return st.layouts[pav]; }
+  const style = v => v === 'GALAXY' ? { stand: '#0000ff', slw: 0.9 } : { stand: '#000000', slw: 0.6 };
+  const PT = FP.MMPT, WALL_LW = 0.45;
+  function toSVG(D, v, interactive) {
+    const S = style(v), f = n => n.toFixed(2);
+    let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 297 420" role="img" aria-label="Κάτοψη περιπτέρου">`;
+    s += `<path d="${D.walls.map(p => 'M' + p.map(q => f(q[0]) + ' ' + f(q[1])).join('L')).join('')}" fill="none" stroke="#000" stroke-width="${WALL_LW * PT}" stroke-linecap="butt"/>`;
+    s += `<path d="${D.stands.map(p => 'M' + p.map(q => f(q[0]) + ' ' + f(q[1])).join('L') + 'Z').join('')}" fill="none" stroke="${S.stand}" stroke-width="${S.slw * PT}" stroke-linejoin="miter"/>`;
+    s += `<g font-family='${FONT}' font-weight="700" fill="#111" text-anchor="middle">`;
+    for (const t of D.texts) { const fs = t.size * PT, lh = fs * 1.15, n = t.lines.length; t.lines.forEach((ln, i) => { s += `<text x="${f(t.x)}" y="${f(t.y + (i - (n - 1) / 2) * lh)}" font-size="${f(fs)}" dominant-baseline="central">${esc(ln)}</text>`; }); }
+    s += '</g>';
+    if (interactive && D.extras) {
+      const lab = st.cfg.extra_labels || {};
+      for (const x of D.extras) s += `<path class="xbox${x.key === st.selExtra ? ' sel' : ''}${lab[x.key] ? ' has' : ''}" data-key="${x.key}" d="M${x.pts.map(q => f(q[0]) + ' ' + f(q[1])).join('L')}Z"><title>${lab[x.key] ? 'Αλλαγή κειμένου' : 'Κενό κουτί: κλικ για αριθμό ή κείμενο'}</title></path>`;
+    }
+    return s + '</svg>';
+  }
+  function toPDF(D, v) {
+    const S = style(v), { jsPDF } = window.jspdf, doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a3' });
+    doc.setLineCap('butt'); doc.setLineJoin('miter');
+    const poly = (p, close) => { const segs = []; for (let i = 1; i < p.length; i++) segs.push([p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]]); doc.lines(segs, p[0][0], p[0][1], [1, 1], 'S', !!close); };
+    doc.setDrawColor(0, 0, 0); doc.setLineWidth(WALL_LW * PT); D.walls.forEach(p => poly(p, false));
+    const c = S.stand === '#0000ff' ? [0, 0, 255] : [0, 0, 0]; doc.setDrawColor(...c); doc.setLineWidth(S.slw * PT); D.stands.forEach(p => poly(p, false));
+    doc.addFileToVFS('StandSans-Bold.ttf', FONT_B64); doc.addFont('StandSans-Bold.ttf', 'StandSans', 'bold');
+    doc.setFont('StandSans', 'bold'); doc.setTextColor(17, 17, 17);
+    for (const t of D.texts) { doc.setFontSize(t.size); const lh = t.size * PT * 1.15, n = t.lines.length; t.lines.forEach((ln, i) => doc.text(ln, t.x, t.y + (i - (n - 1) / 2) * lh, { align: 'center', baseline: 'middle' })); }
+    return doc.output('blob');
+  }
+  function toJPG(D, v) {
+    const S = style(v), k = 300 / 25.4, cv = document.createElement('canvas'); cv.width = Math.round(297 * k); cv.height = Math.round(420 * k);
+    const g = cv.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, cv.width, cv.height); g.lineCap = 'butt'; g.lineJoin = 'miter';
+    const path = (p, close) => { g.beginPath(); g.moveTo(p[0][0] * k, p[0][1] * k); for (let i = 1; i < p.length; i++) g.lineTo(p[i][0] * k, p[i][1] * k); if (close) g.closePath(); g.stroke(); };
+    g.strokeStyle = '#000'; g.lineWidth = WALL_LW * PT * k; D.walls.forEach(p => path(p, false));
+    g.strokeStyle = S.stand; g.lineWidth = S.slw * PT * k; D.stands.forEach(p => path(p, true));
+    g.fillStyle = '#111'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    for (const t of D.texts) { const px = t.size * PT * k; g.font = `700 ${px}px ${FONT}`; const n = t.lines.length; t.lines.forEach((ln, i) => g.fillText(ln, t.x * k, (t.y + (i - (n - 1) / 2) * t.size * PT * 1.15) * k)); }
+    return new Promise(r => cv.toBlob(r, 'image/jpeg', 0.95));
+  }
+  const prefix = () => ($('exName').value.trim() || 'EKTHESI').replace(/[\\/:*?"<>|]+/g, '_').replace(/\s+/g, '_');
+  const fname = (pav, v) => `${prefix()}_Periptero_${pav}_${v}.${v === 'GALAXY' ? 'jpg' : 'pdf'}`;
+
+  function renderTabs() {
+    const tabs = $('tabs'); tabs.innerHTML = '';
+    for (const P of st.cfg.pavilions) { const b = document.createElement('button'); b.type = 'button'; b.className = 'tab'; b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', String(P.name === st.pav)); b.textContent = 'Περ. ' + P.name; b.onclick = async () => { st.pav = P.name; renderTabs(); await renderSheet(); }; tabs.appendChild(b); }
+  }
+  async function renderSheet() {
+    $('emptyState').hidden = true; $('sheetView').hidden = false;
+    const box = $('sheet'); box.innerHTML = '<div class="status"><span class="spin"></span><span>Σχεδίαση κάτοψης…</span></div>'; await tick();
+    await ensureFont();
+    const D = getLayout(st.pav);
+    box.innerHTML = D ? toSVG(D, st.variant, true) : '<p class="muted">Δεν υπάρχει τίποτα σε αυτό το περίπτερο.</p>';
+    renderExtraEditor();
+    $('fnames').textContent = `${fname(st.pav, 'XARTHS')}  ·  ${fname(st.pav, 'GALAXY')}`;
+    $('dlPdf').textContent = 'Λήψη PDF (μαύρο)'; $('dlJpg').textContent = 'Λήψη JPG (μπλε)';
+  }
+  $('sheet').addEventListener('click', e => {
+    const p = e.target.closest && e.target.closest('.xbox'); if (!p) return;
+    st.selExtra = p.dataset.key; renderSheet().then(() => { const i = $('xText'); if (i) { i.focus(); i.select(); } });
+  });
+  function renderExtraEditor() {
+    const box = $('xEdit'); const key = st.selExtra;
+    const D = st.layouts[st.pav]; const has = D && D.extras && D.extras.some(x => x.key === key);
+    box.hidden = !has; if (!has) return;
+    const lab = (st.cfg.extra_labels || {})[key] || '';
+    box.innerHTML = '';
+    const lb = document.createElement('label'); lb.className = 'field'; lb.textContent = 'Κενό κουτί: γράψτε αριθμό stand (π.χ. D02a) ή κείμενο (π.χ. Open Stage)';
+    const inp = document.createElement('input'); inp.type = 'text'; inp.id = 'xText'; inp.value = lab; inp.autocomplete = 'off'; lb.appendChild(inp);
+    const row = document.createElement('div'); row.className = 'row'; row.style.marginTop = '8px';
+    const ok = document.createElement('button'); ok.type = 'button'; ok.className = 'primary'; ok.textContent = 'Εφαρμογή';
+    const clr = document.createElement('button'); clr.type = 'button'; clr.textContent = 'Άδειο κουτί';
+    const cancel = document.createElement('button'); cancel.type = 'button'; cancel.className = 'ghost'; cancel.textContent = 'Κλείσιμο';
+    const apply = async val => { st.cfg.extra_labels = st.cfg.extra_labels || {}; if (val) st.cfg.extra_labels[key] = val; else delete st.cfg.extra_labels[key]; delete st.layouts[st.pav]; await renderSheet(); renderReport(); toast(val ? 'Το κείμενο μπήκε στην κάτοψη.' : 'Το κουτί έμεινε άδειο.'); };
+    ok.onclick = () => apply(inp.value.trim()); clr.onclick = () => apply('');
+    cancel.onclick = () => { st.selExtra = null; renderSheet(); };
+    inp.onkeydown = e => { if (e.key === 'Enter') apply(inp.value.trim()); if (e.key === 'Escape') cancel.onclick(); };
+    row.append(ok, clr, cancel); box.append(lb, row);
+  }
+  $('vBlue').onclick = () => { st.variant = 'GALAXY'; $('vBlue').setAttribute('aria-pressed', 'true'); $('vBlack').setAttribute('aria-pressed', 'false'); renderSheet(); };
+  $('vBlack').onclick = () => { st.variant = 'XARTHS'; $('vBlack').setAttribute('aria-pressed', 'true'); $('vBlue').setAttribute('aria-pressed', 'false'); renderSheet(); };
+  $('exName').oninput = () => st.pav && ($('fnames').textContent = `${fname(st.pav, 'XARTHS')}  ·  ${fname(st.pav, 'GALAXY')}`);
+
+  async function fallback(filename, data) {
+    // viewer without the save capability: show the file so it can be saved with right-click (images) or explain
+    const box = $('fallback'); box.hidden = false; box.innerHTML = '';
+    const p = document.createElement('p'); p.style.margin = '0';
+    if (/\.jpg$/i.test(filename)) {
+      p.textContent = 'Η αυτόματη λήψη δεν επιτρέπεται εδώ. Κάντε δεξί κλικ στην εικόνα → «Αποθήκευση εικόνας ως…» και δώστε το όνομα:';
+      const n = document.createElement('code'); n.textContent = filename; n.style.cssText = 'display:block;font:600 12.5px var(--f-mono);margin-top:4px;word-break:break-all';
+      const url = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(data); });
+      const img = document.createElement('img'); img.src = url; img.alt = filename; img.style.cssText = 'width:100%;max-width:640px;background:#fff;border:1px solid var(--line);border-radius:6px;margin-top:8px';
+      box.append(p, n, img);
+    } else {
+      p.textContent = 'Το PDF και το ZIP κατεβαίνουν μόνο όταν η σελίδα ανοίγει μέσα από το claude.ai με λογαριασμό που έχει πρόσβαση. Εδώ μπορείτε να πάρετε το JPG με «Λήψη JPG».';
+      box.append(p);
+    }
+    box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+  async function save(filename, data) {
+    if (window.__STANDALONE) {
+      const url = URL.createObjectURL(data instanceof Blob ? data : new Blob([data]));
+      const a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000); toast('Κατέβηκε: ' + filename); return;
+    }
+    if (!dl) { if (dlPromise) toast('Σύνδεση με το claude.ai…'); await getDl(); }
+    if (!dl) { await fallback(filename, data); return; }
+    try { await dl.save({ filename, data }); toast('Αποθηκεύτηκε: ' + filename); }
+    catch (e) { if (e && e.code === 'declined') return; if (e && e.code === 'rate_limited') { toast('Περιμένετε λίγο και δοκιμάστε ξανά.'); return; } if (e && ['unavailable','not_granted','capability_disabled','capability_removed'].includes(e.code)) { dl = null; await fallback(filename, data); return; } toast('Η λήψη δεν ολοκληρώθηκε.'); }
+  }
+  $('dlPdf').onclick = async () => { await ensureFont(); const D = getLayout(st.pav); if (D) await save(fname(st.pav, 'XARTHS'), toPDF(D, 'XARTHS')); };
+  $('dlJpg').onclick = async () => { await ensureFont(); const D = getLayout(st.pav); if (D) await save(fname(st.pav, 'GALAXY'), await toJPG(D, 'GALAXY')); };
+  $('dlZip').onclick = async () => {
+    const b = $('dlZip'); b.disabled = true; const old = b.textContent; b.textContent = 'Ετοιμασία…'; await tick();
+    try {
+      const z = new JSZip();
+      for (const P of st.cfg.pavilions) { const D = getLayout(P.name); if (!D) continue; z.file(fname(P.name, 'XARTHS'), toPDF(D, 'XARTHS')); z.file(fname(P.name, 'GALAXY'), await toJPG(D, 'GALAXY')); await tick(); }
+      const blob = await z.generateAsync({ type: 'blob' });
+      await save(`${prefix()}_katopseis.zip`, blob);
+    } finally { b.textContent = old; b.disabled = false; updateDl(); }
+  };
+  window.__app = { st, analyze, toPDF, toJPG, getLayout, fname };
+})();
+</script>
