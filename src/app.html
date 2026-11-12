@@ -556,6 +556,8 @@ window.dispatchEvent(new Event('dwg-ready'));
     if (fresh || !st.cfg) {
       const g = FP.guessLayers(st.sv);
       for (const x of st.xrefs) { const gx = FP.guessLayers(FP.survey(x.db)); g.wall = [...new Set(g.wall.concat(gx.wall))]; }
+      st.autoStand = false;
+      if (!g.stand.length && g.number.length) { g.stand = FP.guessStandLayers(st.G, g.number, g.wall); st.autoStand = g.stand.length > 0; }
       st.cfg = { stand_layers: g.stand, wall_layers: g.wall, number_layers: g.number, pad_digits: 2, splits: [], renames: [], axis: 'y' };
       st.cfg.building = FP.guessBuilding(st.G, st.cfg);
       let res = FP.detect(st.G, st.cfg);
@@ -574,8 +576,8 @@ window.dispatchEvent(new Event('dwg-ready'));
     }
     st.rep = FP.assign(st.res, st.cfg);
     st.layouts = {};
-    if (!st.res.stands.length) { status(s1, `Δεν βρέθηκαν stand${st.version ? ' (' + st.version + ')' : ''}. Ελέγξτε στο «Layers και κανόνες» ποια layers έχουν τα stand και τους κωδικούς. Αν τα layers φαίνονται σωστά: ${SAVEAS}`); $('s2').hidden = false; $('s3').hidden = false; $('layerBox').open = true; renderReport(); return; }
-    status(s1, `Βρέθηκαν ${st.res.stands.length} stand σε ${st.cfg.pavilions.length} ${st.cfg.pavilions.length === 1 ? 'περίπτερο' : 'περίπτερα'}${st.version ? ' · ' + st.version : ''}.`);
+    if (!st.res.stands.length) { status(s1, `Δεν βρέθηκαν stand${st.version ? ' (' + st.version + ')' : ''}. Δεν αναγνωρίστηκε ποια layers έχουν τα κουτάκια των stand και ποια τους κωδικούς: σημειώστε τα στο «Layers και κανόνες» (ανοιχτό παρακάτω) και πατήστε «Επανυπολογισμός». Αν η λίστα των layers είναι άδεια ή ελλιπής: ${SAVEAS}`); $('s2').hidden = false; $('s3').hidden = false; $('layerBox').open = true; renderReport(); return; }
+    status(s1, `Βρέθηκαν ${st.res.stands.length} stand σε ${st.cfg.pavilions.length} ${st.cfg.pavilions.length === 1 ? 'περίπτερο' : 'περίπτερα'}${st.version ? ' · ' + st.version : ''}.` + (st.autoStand ? ` Κανένα layer δεν λέγεται «stand», οπότε τα κουτάκια βρέθηκαν από το σχήμα τους στα layers: ${st.cfg.stand_layers.join(', ')}. Ελέγξτε τα στο «Layers και κανόνες».` : ''));
     $('s2').hidden = false; $('s3').hidden = false;
     renderPavs(); renderOverview(); renderReport();
     if (!st.cfg.pavilions.some(p => p.name === st.pav)) st.pav = st.cfg.pavilions[0]?.name;
@@ -726,7 +728,7 @@ window.dispatchEvent(new Event('dwg-ready'));
     const rot = st.rot[pav] || 0;
     const sh = st.shift[pav] || [0, 0], shifted = !!(sh[0] || sh[1]);
     const baseKey = pav + (rot ? `|r${rot}` : '') + (shifted ? `|s${sh[0].toFixed(3)},${sh[1].toFixed(3)}` : '');
-    if (!st.layouts[baseKey]) st.layouts[baseKey] = FP.layout(st.res, st.cfg, pav, measure, { rotate: rot, autoLandscape: !!rot, shift: sh });
+    if (!st.layouts[baseKey]) st.layouts[baseKey] = FP.layout(st.res, st.cfg, pav, measure, { rotate: rot, autoLandscape: true, shift: sh });
     if (!site) return st.layouts[baseKey];
     // site version: same page orientation as the plain sheet, image band on that page
     const base = st.layouts[baseKey]; if (!base) return null;
@@ -1054,6 +1056,6 @@ window.dispatchEvent(new Event('dwg-ready'));
       await save(`${prefix()}_katopseis.zip`, blob);
     } finally { b.textContent = old; b.disabled = false; updateDl(); }
   };
-  window.__app = { st, analyze, toPDF, toJPG, getLayout, fname, siteBand };
+  window.__app = { FP, st, analyze, toPDF, toJPG, getLayout, fname, siteBand };
 })();
 </script>

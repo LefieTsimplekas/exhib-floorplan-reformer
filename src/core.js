@@ -311,6 +311,8 @@ const FP = (() => {
       const U = ch.toUpperCase();
       if (GREEK[U]) o += (ch === U ? GREEK[U] : GREEK[U].toLowerCase()); else o += ch;
     }
+    // a code broken by a stray space in the drawing ("A0 6", "B 19") is still one code
+    if (/\s/.test(o)) { const c = o.replace(/\s+/g, ''); if (c.length <= 6 && new RegExp(DEFAULT_RE).test(c)) return c; }
     return o;
   }
   // a code typed by a person: Latin letters, two digits, leading letters in capitals (d2a -> D02a)
@@ -325,13 +327,76 @@ const FP = (() => {
   // ---------- auto-guess ----------
   function guessLayers(sv, re = DEFAULT_RE) {
     const R = new RegExp(re);
-    const pickNum = key => sv.layers.filter(L => { const T = L[key] || []; const m = T.filter(t => R.test(norm(t))).length; return m >= 5 && m / T.length >= 0.5; }).map(L => L.name);
+    // layers whose texts are mostly codes; small side layers (circuit numbers, camera numbers…) are dropped next to the main one
+    const pickNum = key => {
+      const c = sv.layers.map(L => { const T = L[key] || []; const m = T.filter(t => R.test(norm(t))).length; return { n: L.name, m, ok: m >= 5 && m / T.length >= 0.5 }; }).filter(o => o.ok);
+      const top = Math.max(0, ...c.map(o => o.m)); return c.filter(o => o.m >= 0.25 * top).map(o => o.n);
+    };
     // stand codes as plain text first; block attributes only when no text layer qualifies (sockets, manholes etc. also carry numbers)
     let number = pickNum('texts'); if (!number.length) number = pickNum('attrs');
-    const stand = sv.layers.filter(L => L.geo > 0 && /stand|stant/i.test(L.name) && !/_no\b|numb|name|_old/i.test(L.name)).map(L => L.name);
-    const wallRe = /^(toixos|helexpo|porta|portes|skales|walls?|doors?|stairs?)$/i;
+    const stand = sv.layers.filter(L => L.geo >= 8 && /stand|stant/i.test(L.name) && !/_no\b|numb|name|_old|availab|free|διαθεσ/i.test(L.name)).map(L => L.name);
+    const wallRe = /^(toixos|helexpo|porta|portes|skales|walls?|doors?|stairs?)$|(^|[^a-z])(walls?|toixo|τοιχ)/i;
     const wall = sv.layers.filter(L => L.geo > 0 && wallRe.test(L.name)).map(L => L.name);
     return { number, stand, wall };
+  }
+
+  // ---------- stand layers from the drawing itself, when no layer is named "stand" ----------
+  // A stand outline closes around its code on all four sides, leaves room for the code, and holds one code per box.
+  // Floor tiles fail the room test (smaller than the text), building grids fail the one-code test (many codes per cell).
+  function guessStandLayers(G, numberLayers, exclude = []) {
+    const NL = new Set(numberLayers), EX = new Set(exclude), R = new RegExp(DEFAULT_RE);
+    const codes = G.filter(g => g.text !== undefined && NL.has(g.layer)).map(g => ({ t: norm(g.text), c: g.c || g.pt, h: g.hgt || 0 })).filter(o => R.test(o.t));
+    if (codes.length < 3) return [];
+    const hs = codes.map(o => o.h).filter(h => h > 0).sort((a, b) => a - b), h = hs.length ? hs[hs.length >> 1] : 1, Rd = 30 * h;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const o of codes) { x0 = Math.min(x0, o.c[0]); x1 = Math.max(x1, o.c[0]); y0 = Math.min(y0, o.c[1]); y1 = Math.max(y1, o.c[1]); }
+    x0 -= Rd; y0 -= Rd; x1 += Rd; y1 += Rd;
+    const segs = {};
+    for (const g of G) {
+      if (!g.pts || NL.has(g.layer) || EX.has(g.layer)) continue;
+      const P = g.pts; let S = null;
+      for (let i = 1; i < P.length; i++) {
+        const a = P[i - 1], b = P[i];
+        if (Math.max(a[0], b[0]) < x0 || Math.min(a[0], b[0]) > x1 || Math.max(a[1], b[1]) < y0 || Math.min(a[1], b[1]) > y1) continue;
+        (S || (S = segs[g.layer] || (segs[g.layer] = []))).push(a[0], a[1], b[0], b[1]);
+      }
+    }
+    const dist = S => codes.map(({ c: [x, y] }) => {
+      let l = Rd, r = Rd, d = Rd, u = Rd;
+      for (let i = 0; i < S.length; i += 4) {
+        const ax = S[i], ay = S[i + 1], bx = S[i + 2], by = S[i + 3];
+        if ((ay > y) !== (by > y)) { const xi = ax + (y - ay) * (bx - ax) / (by - ay); if (xi < x) l = Math.min(l, x - xi); else r = Math.min(r, xi - x); }
+        if ((ax > x) !== (bx > x)) { const yi = ay + (x - ax) * (by - ay) / (bx - ax); if (yi < y) d = Math.min(d, y - yi); else u = Math.min(u, yi - y); }
+      }
+      return [l, r, d, u];
+    });
+    const judge = D => {
+      const enc = [], q = h * 0.25; let roomy = 0;
+      D.forEach((v, i) => { if (v.every(z => z < Rd)) { enc.push(i); const w = 0.6 * codes[i].t.length * h; if (v[0] + v[1] >= 0.9 * w && v[2] + v[3] >= 1.2 * h) roomy++; } });
+      if (!enc.length) return { enc: 0, uniq: 0, roomy: 0 };
+      const key = i => { const [x, y] = codes[i].c, v = D[i]; return [x - v[0], x + v[1], y - v[2], y + v[3]].map(z => Math.round(z / q)).join(','); };
+      const cell = {}; for (const i of enc) { const k = key(i); cell[k] = (cell[k] || 0) + 1; }
+      const alone = enc.filter(i => cell[key(i)] === 1).length;
+      return { enc: enc.length / codes.length, uniq: alone / codes.length, roomy: roomy / enc.length };
+    };
+    // candidates: layers that close around codes and leave room for them (floor tiles and dense symbols drop out here)
+    const cand = [], dbg = guessStandLayers.debug = [];
+    for (const [L, S] of Object.entries(segs)) {
+      if (S.length < 16) continue; const D = dist(S), j = judge(D);
+      dbg.push([L, S.length / 4, +j.enc.toFixed(2), +j.uniq.toFixed(2), +j.roomy.toFixed(2)]);
+      if (j.roomy >= 0.7 && j.enc >= 0.15) cand.push({ L, D, j });
+    }
+    if (!cand.length) return [];
+    // grow a set of layers from the one that closes most codes, adding layers while more codes get a box of their own
+    cand.sort((a, b) => b.j.enc - a.j.enc || b.j.uniq - a.j.uniq);
+    const pick = [cand[0].L]; let U = cand[0].D, cur = cand[0].j;
+    for (const c of cand.slice(1)) {
+      const U2 = U.map((v, i) => v.map((z, k) => Math.min(z, c.D[i][k]))), j = judge(U2);
+      if (j.roomy >= 0.7 && j.uniq >= cur.uniq + 0.03) { pick.push(c.L); U = U2; cur = j; }
+    }
+    guessStandLayers.score = cur;
+    if (cur.uniq < 0.3) return [];
+    return pick;
   }
 
   // ---------- main detection (fp.py) ----------
@@ -355,6 +420,17 @@ const FP = (() => {
     const B = box(src);
     // stands just outside the walls (e.g. at an entrance) still belong to the plan: widen by the stand drawing, but only by a few metres
     const sg = G.filter(g => g.pts && SL.has(g.layer));
+    // "walls" that hold only a part of the stand codes are not the building outline (a few stray lines on a WALLS layer): use the stands
+    const NL = new Set(cfg.number_layers || []), cs = G.filter(g => g.text !== undefined && NL.has(g.layer)).map(g => g.c || g.pt);
+    if (sg.length && src !== sg && cs.length >= 10 && src.length < Math.max(40, 0.1 * sg.length)) {
+      const inside = cs.filter(([x, y]) => x >= B[0] && x <= B[2] && y >= B[1] && y <= B[3]).length;
+      if (inside < 0.8 * cs.length) {
+        // the stand drawing, kept to the area of the codes (legends and title blocks drawn on the same layers stay out)
+        const S = box(sg), xs = cs.map(p => p[0]), ys = cs.map(p => p[1]);
+        const C = [pct(xs, 0.5), pct(ys, 0.5), pct(xs, 99.5), pct(ys, 99.5)], m = 0.04 * Math.max(C[2] - C[0], C[3] - C[1]) + 3;
+        return [Math.max(S[0], C[0] - m), Math.max(S[1], C[1] - m), Math.min(S[2], C[2] + m), Math.min(S[3], C[3] + m)];
+      }
+    }
     if (sg.length && src !== sg) { const S = box(sg), lim = 15; B[0] = Math.max(Math.min(B[0], S[0]), B[0] - lim); B[1] = Math.max(Math.min(B[1], S[1]), B[1] - lim); B[2] = Math.min(Math.max(B[2], S[2]), B[2] + lim); B[3] = Math.min(Math.max(B[3], S[3]), B[3] + lim); }
     return B;
   }
@@ -449,14 +525,16 @@ const FP = (() => {
       extra.push(ring(f));
     }
     // labels for pavilions: "ΠΕΡΙΠΤΕΡΟ / PAVILION" titles, number either inside or as a big separate text nearby
-    const isTitle = t => /(Π\s*Ε\s*Ρ\s*[ΙΊ]\s*Π\s*Τ\s*Ε\s*Ρ\s*Ο(?!Υ)|PAVILION|PERIPTERO|\bHALL\b)/i.test(t) && !/προς|\bto\b|MANAGER|ΥΠΕΥΘ|ΓΡΑΦΕΙΟ/i.test(t);
+    // letter-spaced titles ("H A L L   1") are read as words; HALL counts only with its number (not "HALL'S HEIGHT", "HALL MASTER")
+    const unspace = t => t.split(/\s{2,}/).map(w => /^(\S\s)+\S$/.test(w) ? w.replace(/\s/g, '') : w).join(' ');
+    const isTitle = t => { t = unspace(t); return (/(Π\s*Ε\s*Ρ\s*[ΙΊ]\s*Π\s*Τ\s*Ε\s*Ρ\s*Ο(?!Υ)|PAVILION|PERIPTERO)/i.test(t) || /\bHALL\s*(No\.?|#)?\s*\d{1,3}\b/i.test(t)) && !/προς|\bto\b|MANAGER|ΥΠΕΥΘ|ΓΡΑΦΕΙΟ/i.test(t); };
     const near = g => g.pt[0] > bx0 - 25 && g.pt[0] < bx1 + 25 && g.pt[1] > by0 - 25 && g.pt[1] < by1 + 25;
     const bigNums = G0.filter(g => g.text && /^\d{1,3}$/.test(g.text.trim()) && near(g));
     const medH = (() => { const h = nums.map(n => n.hgt).sort((a, b) => a - b); return h.length ? h[h.length >> 1] : 1; })();
     const pavLabels = [];
     for (const g of G0) {
       if (!g.text || !isTitle(g.text) || !near(g)) continue;
-      const t = g.text.replace(/(scale|κλ[ιί]μακα|ΚΛ[ΙΊ]ΜΑΚΑ)[^\n]*/ig, '').replace(/\d+\s*[:.,\/]\s*\d+/g, '');
+      const t = unspace(g.text).replace(/(scale|κλ[ιί]μακα|ΚΛ[ΙΊ]ΜΑΚΑ)[^\n]*/ig, '').replace(/\d+\s*[:.,\/]\s*\d+/g, '');
       let num = (t.match(/(\d{1,3})/) || [])[1];
       if (!num) {
         let best = null, bd = 20;
@@ -667,6 +745,6 @@ const FP = (() => {
     return D;
   }
 
-  return { typedCode, extraKey, survey, guessLayers, loadGeometry, guessBuilding, detect, guessPavilions, assign, layout, norm, pad, DEFAULT_RE, A3, MMPT, modelSpaceId };
+  return { typedCode, extraKey, survey, guessLayers, guessStandLayers, _gsl: () => guessStandLayers.debug, loadGeometry, guessBuilding, detect, guessPavilions, assign, layout, norm, pad, DEFAULT_RE, A3, MMPT, modelSpaceId };
 })();
 if (typeof module !== 'undefined') module.exports = FP;
