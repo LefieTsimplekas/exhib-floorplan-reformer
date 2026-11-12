@@ -105,6 +105,7 @@ details[open] > summary::before{transform:rotate(45deg)}
 .tab[aria-selected="true"]{background:var(--ink);color:var(--sheet);border-color:var(--ink)}
 .viewer-head{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center;margin-bottom:12px}
 #rotBtn{margin-left:auto}
+.lw{display:inline-flex;align-items:center;gap:4px}.lw button{min-width:28px;padding:4px 8px;font-weight:600}.lw output{min-width:42px;text-align:center;font-variant-numeric:tabular-nums;font-size:13px}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
 .seg button{border:0;border-radius:0;padding:6px 12px}
 .seg button[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent)}
@@ -216,6 +217,7 @@ details[open] > summary::before{transform:rotate(45deg)}
           <div class="viewer-head">
             <div class="tabs" id="tabs" role="tablist"></div>
             <button type="button" id="rotBtn" class="ghost iconbtn" title="Περιστροφή της κάτοψης κατά 90°"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg><span id="rotLbl">Περιστροφή 90°</span></button>
+            <div class="lw" role="group" aria-label="Πάχος γραμμών stand" title="Πάχος γραμμών των stand (οι τοίχοι δεν αλλάζουν)"><span class="small muted">Πάχος stand</span><button type="button" id="lwMinus" class="ghost" aria-label="Λεπτότερες γραμμές">−</button><output id="lwVal">100%</output><button type="button" id="lwPlus" class="ghost" aria-label="Παχύτερες γραμμές">+</button></div>
             <div class="seg" role="group" aria-label="Εκδοχή">
               <button type="button" id="vBlue" aria-pressed="true">Μπλε</button>
               <button type="button" id="vBlack" aria-pressed="false">Μαύρο</button>
@@ -263,7 +265,7 @@ window.dispatchEvent(new Event('dwg-ready'));
 <script>
 (() => {
   const $ = id => document.getElementById(id);
-  const st = { host: null, sv: null, xrefNeed: [], xrefs: [], G: null, cfg: null, res: null, rep: null, pav: null, variant: 'GALAXY', layouts: {}, fileName: '', site: { img: null, w: 0, h: 0, fmt: 'PNG', pos: 'top', size: 'M' }, rot: {} };
+  const st = { host: null, sv: null, xrefNeed: [], xrefs: [], G: null, cfg: null, res: null, rep: null, pav: null, variant: 'GALAXY', layouts: {}, fileName: '', site: { img: null, w: 0, h: 0, fmt: 'PNG', pos: 'top', size: 'M' }, rot: {}, lw: 1 };
   let lib = null, dl = null;
 
   // ---------- capabilities ----------
@@ -537,7 +539,7 @@ window.dispatchEvent(new Event('dwg-ready'));
     if (!st.layouts[key]) st.layouts[key] = FP.layout(st.res, st.cfg, pav, measure, opts);
     return st.layouts[key];
   }
-  const style = v => v === 'XARTHS' ? { stand: '#000000', slw: 0.6 } : { stand: '#0000ff', slw: 0.9 };
+  const style = v => v === 'XARTHS' ? { stand: '#000000', slw: 0.6 * st.lw } : { stand: '#0000ff', slw: 0.9 * st.lw };
   const PT = FP.MMPT, WALL_LW = 0.45;
   function toSVG(D, v, interactive) {
     const S = style(v), f = n => n.toFixed(2);
@@ -626,6 +628,10 @@ window.dispatchEvent(new Event('dwg-ready'));
   }
   const setVariant = v => { st.variant = v; [['vBlue', 'GALAXY'], ['vBlack', 'XARTHS'], ['vSite', 'SITE']].forEach(([id, k]) => $(id).setAttribute('aria-pressed', String(k === v))); renderSheet(); };
   const rotLabel = () => { const r = st.rot[st.pav] || 0; $('rotLbl').textContent = r ? `Περιστροφή · ${r}°` : 'Περιστροφή 90°'; };
+  const LW_MIN = 0.25, LW_MAX = 4;
+  function setLw(v) { st.lw = Math.round(Math.min(LW_MAX, Math.max(LW_MIN, v)) * 100) / 100; $('lwVal').textContent = Math.round(st.lw * 100) + '%'; $('lwMinus').disabled = st.lw <= LW_MIN; $('lwPlus').disabled = st.lw >= LW_MAX; renderSheet(); }
+  $('lwMinus').onclick = () => setLw(st.lw - (st.lw > 1 ? 0.25 : 0.125));
+  $('lwPlus').onclick = () => setLw(st.lw + (st.lw >= 1 ? 0.25 : 0.125));
   $('rotBtn').onclick = async () => { st.rot[st.pav] = ((st.rot[st.pav] || 0) + 90) % 360; rotLabel(); await renderSheet(); };
   $('vBlue').onclick = () => setVariant('GALAXY');
   $('vBlack').onclick = () => setVariant('XARTHS');
