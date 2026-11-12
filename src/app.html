@@ -166,12 +166,13 @@ details[open] > summary::before{transform:rotate(45deg)}
           <span class="muted">Από AutoCAD ή ActCAD, μορφή DWG 2000 έως 2018+.</span>
         </label>
         <label class="drop drop-sm" id="drop2">
-          <input type="file" id="file2" accept=".pdf,.zip,.json" multiple>
+          <input type="file" id="file2" accept=".pdf,.jpg,.jpeg,.zip,.json" multiple>
           <strong>Προηγούμενη εργασία <span class="muted" style="font-weight:400">(προαιρετικό)</span></strong>
-          <span class="muted">Το PDF ή το ZIP που είχατε κατεβάσει από την εφαρμογή: επανέρχονται όλες οι αλλαγές σας. Το PDF του site φέρνει και την εικόνα, τα PDF λογοτύπων και τα λογότυπα (μπορείτε να διαλέξετε πολλά μαζί).</span>
+          <span class="muted">Οποιοδήποτε αρχείο είχατε κατεβάσει από την εφαρμογή (μαύρο PDF, μπλε JPG, site, λογότυπα ή ZIP): επανέρχονται όλες οι αλλαγές σας. Το PDF του site φέρνει και την εικόνα, τα PDF λογοτύπων και τα λογότυπα (μπορείτε να διαλέξετε πολλά μαζί).</span>
         </label>
         <div class="status" id="status2"></div>
         <div class="status" id="status1"></div>
+        <div class="callout" id="autoBox" hidden style="margin-top:10px;background:var(--accent-soft);color:var(--ink)"></div>
         <div id="xrefBox" hidden></div>
         <div id="nameBox" hidden style="margin-top:12px">
           <label class="field">Όνομα έκθεσης (μπαίνει στην αρχή κάθε αρχείου)
@@ -377,7 +378,7 @@ window.dispatchEvent(new Event('dwg-ready'));
   wireDrop($('drop1'), $('file1'), async file => {
     const s1 = $('status1');
     if (!/\.dwg$/i.test(file.name)) { status(s1, 'Το αρχείο πρέπει να είναι .dwg.'); return; }
-    st.fileName = file.name; st.xrefs = []; st.cfg = null; st.res = null; st.layouts = {};
+    st.fileName = file.name; st.dwgSize = file.size; st.autoArmed = false; $('autoBox').hidden = true; st.xrefs = []; st.cfg = null; st.res = null; st.layouts = {};
     try {
       status(s1, lib ? 'Ανάγνωση σχεδίου…' : 'Φόρτωση αναγνώστη DWG (μία φορά, ~11 MB)…', true); await tick();
       await getLib(); status(s1, 'Ανάγνωση σχεδίου…', true); await tick();
@@ -493,7 +494,7 @@ window.dispatchEvent(new Event('dwg-ready'));
       try {
         status(s2, 'Ανάγνωση…', true); await tick();
         const o = await readPrevFiles(files);
-        if (!o) { status(s2, 'Αυτό το αρχείο δεν έχει αποθηκευμένες ρυθμίσεις. Χρειάζεται PDF ή ZIP που κατέβηκε από αυτή την εφαρμογή (από αυτή την έκδοση και μετά).'); el.classList.remove('done'); return; }
+        if (!o) { status(s2, 'Αυτό το αρχείο δεν έχει αποθηκευμένες ρυθμίσεις. Χρειάζεται αρχείο που κατέβηκε από αυτή την εφαρμογή (PDF, JPG ή ZIP).'); el.classList.remove('done'); return; }
         st.prev = o; el.classList.add('done');
         if (st.G && st.cfg) { applyPrev(); await analyze(false); }
         else status(s2, `Έτοιμο: οι αλλαγές για το «${o.set.dwg || 'σχέδιο'}» θα εφαρμοστούν μόλις ανεβάσετε το DWG.`);
@@ -504,6 +505,48 @@ window.dispatchEvent(new Event('dwg-ready'));
     el.addEventListener('dragleave', () => el.classList.remove('over'));
     el.addEventListener('drop', e => { e.preventDefault(); el.classList.remove('over'); const fs = [...e.dataTransfer.files]; if (fs.length) go(fs); });
   })();
+
+  // ---------- automatic save in this browser (IndexedDB), per DWG file name ----------
+  const AUTO = (() => {
+    let dbp = null;
+    const open = () => dbp || (dbp = new Promise((ok, no) => { try { const r = indexedDB.open('ocr-floorplan', 1); r.onupgradeneeded = () => r.result.createObjectStore('work'); r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error); } catch (e) { no(e); } }));
+    const tx = async (mode, fn) => { const db = await open(); return new Promise((ok, no) => { const t = db.transaction('work', mode), os = t.objectStore('work'); const r = fn(os); t.oncomplete = () => ok(r && r.result); t.onerror = () => no(t.error); }); };
+    return {
+      get: k => tx('readonly', os => os.get(k)).catch(() => null),
+      put: (k, v) => tx('readwrite', os => os.put(v, k)).catch(() => null),
+      del: k => tx('readwrite', os => os.delete(k)).catch(() => null),
+      async prune(max = 40) { try { const keys = await tx('readonly', os => os.getAllKeys()), vals = await tx('readonly', os => os.getAll()); if (keys.length <= max) return; const order = keys.map((k, i) => [k, vals[i] && vals[i].at || 0]).sort((a, b) => a[1] - b[1]); for (const [k] of order.slice(0, keys.length - max)) await this.del(k); } catch (e) { } }
+    };
+  })();
+  const autoKey = () => 'dwg:' + (st.fileName || '').toLowerCase();
+  let autoT = null;
+  function autosave() {
+    if (!st.autoArmed || !st.cfg || !st.fileName) return;
+    clearTimeout(autoT);
+    autoT = setTimeout(async () => {
+      const set = snapshot(); if (!set) return;
+      const logos = {}; for (const [k, L] of Object.entries(st.logos)) logos[k] = { name: L.name, fmt: L.fmt, w: L.w, h: L.h, img: L.img };
+      const site = st.site.img ? { name: st.site.name, fmt: st.site.fmt, w: st.site.w, h: st.site.h, img: st.site.img } : null;
+      await AUTO.put(autoKey(), { at: Date.now(), size: st.dwgSize, set, site, logos }); AUTO.prune();
+    }, 800);
+  }
+  async function offerAuto() {
+    const box = $('autoBox');
+    if (st.prev) { st.autoArmed = true; return; } // work given as a file wins
+    const rec = await AUTO.get(autoKey());
+    if (!rec || !rec.set) { st.autoArmed = true; return; }
+    const d = new Date(rec.at), when = `${d.toLocaleDateString('el-GR')}, ${d.toLocaleTimeString('el-GR', { hour: '2-digit', minute: '2-digit', hour12: false })}`;
+    const nl = Object.keys(rec.logos || {}).length, extra = [rec.site ? 'εικόνα site' : '', nl ? `${nl} λογότυπα` : ''].filter(Boolean).join(', ');
+    box.innerHTML = ''; box.hidden = false;
+    const t = document.createElement('div'); t.textContent = `Σε αυτόν τον υπολογιστή υπάρχουν αποθηκευμένες αλλαγές για αυτό το DWG (${when}${extra ? ' · ' + extra : ''}).` + (rec.size && st.dwgSize && rec.size !== st.dwgSize ? ' Το DWG έχει αλλάξει από τότε· ελέγξτε το αποτέλεσμα.' : '');
+    const row = document.createElement('div'); row.className = 'row'; row.style.marginTop = '8px';
+    const yes = document.createElement('button'); yes.type = 'button'; yes.className = 'primary'; yes.textContent = 'Συνέχεια από εκεί';
+    const no = document.createElement('button'); no.type = 'button'; no.className = 'ghost'; no.textContent = 'Νέα αρχή';
+    yes.onclick = async () => { box.hidden = true; st.prev = { set: rec.set, site: rec.site, logos: Object.fromEntries(Object.entries(rec.logos || {}).map(([k, L]) => [k, { ...L, alias: 'logo' + (++logoSeq) }])) }; applyPrev(); st.prev = null; st.autoArmed = true; await analyze(false); };
+    no.onclick = () => { box.hidden = true; st.autoArmed = true; autosave(); };
+    const note = document.createElement('div'); note.className = 'small muted'; note.style.marginTop = '6px'; note.textContent = 'Μέχρι να διαλέξετε, οι νέες αλλαγές δεν αποθηκεύονται εδώ.';
+    row.append(yes, no); box.append(t, row, note);
+  }
 
   // ---------- analysis ----------
   async function analyze(fresh) {
@@ -537,6 +580,7 @@ window.dispatchEvent(new Event('dwg-ready'));
     renderPavs(); renderOverview(); renderReport();
     if (!st.cfg.pavilions.some(p => p.name === st.pav)) st.pav = st.cfg.pavilions[0]?.name;
     renderTabs(); await renderSheet(); updateDl();
+    if (fresh) await offerAuto();
   }
   async function reassign() { st.rep = FP.assign(st.res, st.cfg); st.layouts = {}; renderOverview(); renderReport(); if (!st.cfg.pavilions.some(p => p.name === st.pav)) st.pav = st.cfg.pavilions[0]?.name; renderTabs(); await renderSheet(); updateDl(); }
 
@@ -773,6 +817,16 @@ window.dispatchEvent(new Event('dwg-ready'));
     const snap = snapshot(); if (snap) doc.setProperties({ creator: 'OCR Floorplan Maker', subject: 'Κάτοψη stand', keywords: SET_TAG + b64u(JSON.stringify(snap)) });
     return doc.output('blob');
   }
+  async function withJpgSettings(blob) {
+    if (!blob) return blob; const snap = snapshot();
+    const com = snap ? SET_TAG + b64u(JSON.stringify(snap)) : ''; 
+    const b = new Uint8Array(await blob.arrayBuffer()); if (b[0] !== 0xFF || b[1] !== 0xD8) return blob;
+    // mark the JFIF header as 300 dpi (the sheet is drawn at 300 dpi)
+    if (b[2] === 0xFF && b[3] === 0xE0 && b[6] === 0x4A && b[7] === 0x46 && b[8] === 0x49 && b[9] === 0x46) { b[13] = 1; b[14] = 1; b[15] = 44; b[16] = 1; b[17] = 44; }
+    if (!com || com.length > 65000) return new Blob([b], { type: 'image/jpeg' });
+    const L = com.length + 2, seg = new Uint8Array(4 + com.length); seg.set([0xFF, 0xFE, L >> 8, L & 255]); for (let i = 0; i < com.length; i++) seg[4 + i] = com.charCodeAt(i);
+    return new Blob([b.subarray(0, 2), seg, b.subarray(2)], { type: 'image/jpeg' });
+  }
   function toJPG(D, v) {
     const PG = D.page || { W: 297, H: 420 };
     const S = style(v), k = 300 / 25.4, cv = document.createElement('canvas'); cv.width = Math.round(PG.W * k); cv.height = Math.round(PG.H * k);
@@ -782,7 +836,7 @@ window.dispatchEvent(new Event('dwg-ready'));
     g.strokeStyle = S.stand; g.lineWidth = S.slw * PT * k; D.stands.forEach(p => path(p, true));
     g.fillStyle = '#111'; g.textAlign = 'center'; g.textBaseline = 'middle';
     for (const t of D.texts) { const px = t.size * PT * k; g.font = `700 ${px}px ${FONT}`; const n = t.lines.length; t.lines.forEach((ln, i) => g.fillText(ln, t.x * k, (t.y + (i - (n - 1) / 2) * t.size * PT * 1.15) * k)); }
-    return new Promise(r => cv.toBlob(r, 'image/jpeg', 0.95));
+    return new Promise(r => cv.toBlob(r, 'image/jpeg', 0.95)).then(withJpgSettings);
   }
   const prefix = () => ($('exName').value.trim() || 'EKTHESI').replace(/[\\/:*?"<>|]+/g, '_').replace(/\s+/g, '_');
   const fname = (pav, v) => `${prefix()}_Periptero_${pav}_${v}.${v === 'GALAXY' ? 'jpg' : 'pdf'}`;
@@ -799,7 +853,7 @@ window.dispatchEvent(new Event('dwg-ready'));
     const D = getLayout(st.pav, isSite());
     box.innerHTML = D ? toSVG(D, st.variant, true) : '<p class="muted">Δεν υπάρχει τίποτα σε αυτό το περίπτερο.</p>';
     $('dlSite').disabled = !st.site.img || !st.res;
-    renderExtraEditor(); renderLogoEditor(); logoStatus(); rotLabel(); shiftLabel(); $('extrasLock').hidden = !!st.res;
+    renderExtraEditor(); renderLogoEditor(); logoStatus(); rotLabel(); shiftLabel(); $('extrasLock').hidden = !!st.res; autosave();
     $('fnames').textContent = `${fname(st.pav, 'XARTHS')}  ·  ${fname(st.pav, 'GALAXY')}${st.site.img ? '  ·  ' + fname(st.pav, 'SITE') : ''}`;
     $('dlPdf').textContent = 'Λήψη PDF (μαύρο)'; $('dlJpg').textContent = 'Λήψη JPG (μπλε)';
   }
@@ -949,11 +1003,11 @@ window.dispatchEvent(new Event('dwg-ready'));
     el.addEventListener('dragleave', () => el.classList.remove('over'));
     el.addEventListener('drop', e => { e.preventDefault(); el.classList.remove('over'); const fs = [...e.dataTransfer.files]; if (fs.length) go(fs); });
   })();
-  $('logoCode').onchange = () => { if (st.variant === 'LOGOS') renderSheet(); };
+  $('logoCode').onchange = () => { autosave(); if (st.variant === 'LOGOS') renderSheet(); };
   $('logoClear').onclick = () => { st.logos = {}; st.selLogo = null; $('logoStatus').textContent = ''; renderSheet(); };
   $('dlLogos').onclick = async () => { await ensureFont(); const D = getLayout(st.pav, false); if (D) await save(fname(st.pav, 'LOGOS'), toPDF(D, 'LOGOS')); };
   $('dlSite').onclick = async () => { if (!st.site.img) return; await ensureFont(); const D = getLayout(st.pav, true); if (D) await save(fname(st.pav, 'SITE'), toPDF(D, 'SITE')); };
-  $('exName').oninput = () => st.pav && ($('fnames').textContent = `${fname(st.pav, 'XARTHS')}  ·  ${fname(st.pav, 'GALAXY')}`);
+  $('exName').oninput = () => { autosave(); if (st.pav) $('fnames').textContent = `${fname(st.pav, 'XARTHS')}  ·  ${fname(st.pav, 'GALAXY')}`; };
 
   async function fallback(filename, data) {
     // viewer without the save capability: show the file so it can be saved with right-click (images) or explain
