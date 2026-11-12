@@ -105,6 +105,9 @@ details[open] > summary::before{transform:rotate(45deg)}
 .tab[aria-selected="true"]{background:var(--ink);color:var(--sheet);border-color:var(--ink)}
 .viewer-head{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center;margin-bottom:12px}
 #rotBtn{margin-left:auto}
+.nudge{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:-4px 0 12px}
+.nudge .pad{display:inline-flex;gap:4px}.nudge .pad button{min-width:32px;padding:4px 8px;font-weight:600}
+.nudge select{font:inherit;padding:2px 4px}.nudge label{display:inline-flex;align-items:center;gap:6px}.nudge output{font-variant-numeric:tabular-nums;color:var(--ink-2)}
 .lw{display:inline-flex;align-items:center;gap:4px}.lw button{min-width:28px;padding:4px 8px;font-weight:600}.lw output{min-width:42px;text-align:center;font-variant-numeric:tabular-nums;font-size:13px}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
 .seg button{border:0;border-radius:0;padding:6px 12px}
@@ -223,6 +226,18 @@ details[open] > summary::before{transform:rotate(45deg)}
               <button type="button" id="vBlack" aria-pressed="false">Μαύρο</button>
               <button type="button" id="vSite" aria-pressed="false">Site</button>
             </div>
+          </div>
+          <div class="nudge" role="group" aria-label="Μετακίνηση όλων των stand">
+            <span class="small muted">Μετακίνηση όλων των stand ως προς τους τοίχους</span>
+            <div class="pad">
+              <button type="button" class="ghost" data-d="0,1" aria-label="Πάνω" title="Πάνω">↑</button>
+              <button type="button" class="ghost" data-d="-1,0" aria-label="Αριστερά" title="Αριστερά">←</button>
+              <button type="button" class="ghost" data-d="0,-1" aria-label="Κάτω" title="Κάτω">↓</button>
+              <button type="button" class="ghost" data-d="1,0" aria-label="Δεξιά" title="Δεξιά">→</button>
+            </div>
+            <label class="small muted">Βήμα <select id="nStep"><option value="0.05">5 cm</option><option value="0.1">10 cm</option><option value="0.25" selected>25 cm</option><option value="0.5">50 cm</option><option value="1">1 m</option></select></label>
+            <output id="nVal" class="small">0,00 m · 0,00 m</output>
+            <button type="button" id="nReset" class="ghost small" disabled>Επαναφορά</button>
           </div>
           <div class="sheetbox" id="sheet"></div>
           <div class="callout" id="xEdit" hidden style="margin-top:12px;background:var(--accent-soft);color:var(--ink)"></div>
@@ -549,10 +564,12 @@ const FP = (() => {
       else L.geo++;
       if (e.type === 'INSERT') for (const a of (e.attribs || [])) { if (!a.text || !a.text.text) continue; const A = layers[a.layer] || (layers[a.layer] = { name: a.layer, geo: 0, texts: [] }); (A.attrs || (A.attrs = [])).push(fix1253(clean(a.text.text))); }
     }
-    const xnames = new Set(db.tables.BLOCK_RECORD.entries.filter(b => (b.flags || 0) & 4).map(b => b.name));
-    const xrefs = db.entities.filter(e => e.type === 'INSERT' && xnames.has(e.name)).map(e => ({
-      name: e.name, offset: [e.insertionPoint.x, e.insertionPoint.y], scale: e.xScale ?? 1, rotation: e.rotation || 0
-    }));
+    const xrecs = {}; for (const b of db.tables.BLOCK_RECORD.entries) if ((b.flags || 0) & 4) xrecs[b.name] = b;
+    // the xref's base point (its INSBASE) maps onto the insertion point: world = ins + R·S·(p − base)
+    const xrefs = db.entities.filter(e => e.type === 'INSERT' && xrecs[e.name]).map(e => {
+      const bp = xrecs[e.name].basePoint;
+      return { name: e.name, offset: [e.insertionPoint.x, e.insertionPoint.y], scale: e.xScale ?? 1, yscale: e.yScale ?? e.xScale ?? 1, rotation: e.rotation || 0, base: bp ? [bp.x || 0, bp.y || 0] : null };
+    });
     return { ms, layers: Object.values(layers), xrefs };
   }
 
@@ -595,7 +612,8 @@ const FP = (() => {
     let G = collect(host.db, host.db.entities.filter(e => e.ownerBlockRecordSoftId === host.ms));
     for (const x of xrefDbs) {
       const ms = modelSpaceId(x.db);
-      const XG = collect(x.db, x.db.entities.filter(e => e.ownerBlockRecordSoftId === ms), [x.offset[0], x.offset[1], x.scale, x.scale, x.rotation, 0, 0]);
+      const ib = x.db.header && x.db.header.INSBASE, base = x.base || (ib ? [ib.x || 0, ib.y || 0] : [0, 0]);
+      const XG = collect(x.db, x.db.entities.filter(e => e.ownerBlockRecordSoftId === ms), [x.offset[0], x.offset[1], x.scale, x.yscale ?? x.scale, x.rotation, base[0], base[1]]);
       XG.forEach(g => g.xref = true); G = G.concat(XG);
     }
     return G;
@@ -605,8 +623,12 @@ const FP = (() => {
     const WL = new Set(cfg.wall_layers), SL = new Set(cfg.stand_layers);
     let src = G.filter(g => g.pts && WL.has(g.layer));
     if (src.length < 5) src = G.filter(g => g.pts && SL.has(g.layer));
-    const xs = [], ys = []; for (const g of src) for (const p of g.pts) { xs.push(p[0]); ys.push(p[1]); }
-    return [pct(xs, 0.5) - 3, pct(ys, 0.5) - 3, pct(xs, 99.5) + 3, pct(ys, 99.5) + 3];
+    const box = arr => { const xs = [], ys = []; for (const g of arr) for (const p of g.pts) { xs.push(p[0]); ys.push(p[1]); } return [pct(xs, 0.5) - 3, pct(ys, 0.5) - 3, pct(xs, 99.5) + 3, pct(ys, 99.5) + 3]; };
+    const B = box(src);
+    // stands just outside the walls (e.g. at an entrance) still belong to the plan: widen by the stand drawing, but only by a few metres
+    const sg = G.filter(g => g.pts && SL.has(g.layer));
+    if (sg.length && src !== sg) { const S = box(sg), lim = 15; B[0] = Math.max(Math.min(B[0], S[0]), B[0] - lim); B[1] = Math.max(Math.min(B[1], S[1]), B[1] - lim); B[2] = Math.min(Math.max(B[2], S[2]), B[2] + lim); B[3] = Math.min(Math.max(B[3], S[3]), B[3] + lim); }
+    return B;
   }
 
   function detect(G, cfg) {
@@ -783,10 +805,14 @@ const FP = (() => {
     const rings = res.stands.map(s => s.poly).concat(res.extra).map(p => { const R = ringOf(p), e = p.getEnvelopeInternal(); return { R, e: [e.getMinX(), e.getMinY(), e.getMaxX(), e.getMaxY()] }; });
     const [bx0, by0, bx1, by1] = cfg.building;
     const cb = axis === 'y' ? [bx0, P.min, bx1, P.max] : [P.min, by0, P.max, by1];
-    const walls0 = [];
-    for (const pts of res.WG) walls0.push(...clipWall(pts, cb, rings, 0.04));
     // optional rotation of the sheet in steps of 90° (counter-clockwise): the geometry turns, codes are then placed upright
     const rot = (((opts.rotate || 0) % 360) + 360) % 360;
+    // optional manual shift of all stands against the building, in drawing units (before rotation):
+    // done by moving the walls the opposite way, so stand keys, labels and renames stay untouched
+    const [sdx, sdy] = opts.shift || [0, 0];
+    const wsh = [-sdx, -sdy];
+    const walls0 = [];
+    for (const pts of res.WG) walls0.push(...clipWall((sdx || sdy) ? pts.map(([x, y]) => [x + wsh[0], y + wsh[1]]) : pts, cb, rings, 0.04));
     const rp = rot === 90 ? ([x, y]) => [-y, x] : rot === 180 ? ([x, y]) => [-x, -y] : rot === 270 ? ([x, y]) => [y, -x] : (q => q);
     const rpoly = p => rot ? GF.createPolygon(GF.createLinearRing(p.getExteriorRing().getCoordinates().map(c => { const [x, y] = rp([c.x, c.y]); return new Co(x, y); }))) : p;
     const RS = res.stands.map(t => rot ? { ...t, poly: rpoly(t.poly), lp: PT(...rp([t.lp.getX(), t.lp.getY()])) } : t);
@@ -8063,7 +8089,7 @@ window.dispatchEvent(new Event('dwg-ready'));
 <script>
 (() => {
   const $ = id => document.getElementById(id);
-  const st = { host: null, sv: null, xrefNeed: [], xrefs: [], G: null, cfg: null, res: null, rep: null, pav: null, variant: 'GALAXY', layouts: {}, fileName: '', site: { img: null, w: 0, h: 0, fmt: 'PNG', pos: 'top', size: 'M' }, rot: {}, lw: 1 };
+  const st = { host: null, sv: null, xrefNeed: [], xrefs: [], G: null, cfg: null, res: null, rep: null, pav: null, variant: 'GALAXY', layouts: {}, fileName: '', site: { img: null, w: 0, h: 0, fmt: 'PNG', pos: 'top', size: 'M' }, rot: {}, lw: 1, shift: {}, step: 0.25 };
   let lib = null, dl = null;
 
   // ---------- capabilities ----------
@@ -8152,7 +8178,7 @@ window.dispatchEvent(new Event('dwg-ready'));
       c.append(lab, skip); box.appendChild(c);
       wireDrop(lab, lab.querySelector('input'), async f => {
         try { status($('status1'), 'Ανάγνωση αρχείου κτιρίου…', true); await tick();
-          const db = await readDwg(f); st.xrefs.push({ name: x.name, db, offset: x.offset, scale: x.scale, rotation: x.rotation });
+          const db = await readDwg(f); st.xrefs.push({ name: x.name, db, offset: x.offset, scale: x.scale, yscale: x.yscale, rotation: x.rotation, base: x.base });
           renderXref(); if (!st.xrefNeed.some(y => !st.xrefs.some(z => z.name === y.name))) await analyze(true);
         } catch (e) { status($('status1'), 'Δεν μπόρεσα να διαβάσω το αρχείο του κτιρίου.'); }
       });
@@ -8327,13 +8353,14 @@ window.dispatchEvent(new Event('dwg-ready'));
   }
   function getLayout(pav, site) {
     const rot = st.rot[pav] || 0;
-    const baseKey = pav + (rot ? `|r${rot}` : '');
-    if (!st.layouts[baseKey]) st.layouts[baseKey] = FP.layout(st.res, st.cfg, pav, measure, { rotate: rot, autoLandscape: !!rot });
+    const sh = st.shift[pav] || [0, 0], shifted = !!(sh[0] || sh[1]);
+    const baseKey = pav + (rot ? `|r${rot}` : '') + (shifted ? `|s${sh[0].toFixed(3)},${sh[1].toFixed(3)}` : '');
+    if (!st.layouts[baseKey]) st.layouts[baseKey] = FP.layout(st.res, st.cfg, pav, measure, { rotate: rot, autoLandscape: !!rot, shift: sh });
     if (!site) return st.layouts[baseKey];
     // site version: same page orientation as the plain sheet, image band on that page
     const base = st.layouts[baseKey]; if (!base) return null;
     const b = siteBand(base.page), key = `${baseKey}|site|${st.site.pos}|${b.reserve.toFixed(1)}`;
-    const opts = { rotate: rot, page: base.page, ...(st.site.pos === 'bottom' ? { reserveBottom: b.reserve } : { reserveTop: b.reserve }) };
+    const opts = { rotate: rot, shift: sh, page: base.page, ...(st.site.pos === 'bottom' ? { reserveBottom: b.reserve } : { reserveTop: b.reserve }) };
     if (!st.layouts[key]) st.layouts[key] = FP.layout(st.res, st.cfg, pav, measure, opts);
     return st.layouts[key];
   }
@@ -8398,7 +8425,7 @@ window.dispatchEvent(new Event('dwg-ready'));
     const D = getLayout(st.pav, isSite());
     box.innerHTML = D ? toSVG(D, st.variant, true) : '<p class="muted">Δεν υπάρχει τίποτα σε αυτό το περίπτερο.</p>';
     $('dlSite').disabled = !st.site.img || !st.res;
-    renderExtraEditor(); rotLabel();
+    renderExtraEditor(); rotLabel(); shiftLabel();
     $('fnames').textContent = `${fname(st.pav, 'XARTHS')}  ·  ${fname(st.pav, 'GALAXY')}${st.site.img ? '  ·  ' + fname(st.pav, 'SITE') : ''}`;
     $('dlPdf').textContent = 'Λήψη PDF (μαύρο)'; $('dlJpg').textContent = 'Λήψη JPG (μπλε)';
   }
@@ -8426,6 +8453,16 @@ window.dispatchEvent(new Event('dwg-ready'));
   }
   const setVariant = v => { st.variant = v; [['vBlue', 'GALAXY'], ['vBlack', 'XARTHS'], ['vSite', 'SITE']].forEach(([id, k]) => $(id).setAttribute('aria-pressed', String(k === v))); renderSheet(); };
   const rotLabel = () => { const r = st.rot[st.pav] || 0; $('rotLbl').textContent = r ? `Περιστροφή · ${r}°` : 'Περιστροφή 90°'; };
+  const fmtM = v => (v >= 0 ? '' : '−') + Math.abs(v).toFixed(2).replace('.', ',');
+  // the shift is kept in drawing coordinates, so it survives rotation; arrows and readout follow the screen
+  const toScreen = ([x, y], r) => r === 90 ? [-y, x] : r === 180 ? [-x, -y] : r === 270 ? [y, -x] : [x, y];
+  const toWorld = ([x, y], r) => r === 90 ? [y, -x] : r === 180 ? [-x, -y] : r === 270 ? [-y, x] : [x, y];
+  function shiftLabel() { const [x, y] = toScreen(st.shift[st.pav] || [0, 0], st.rot[st.pav] || 0); $('nVal').textContent = `οριζόντια ${fmtM(x)} m · κάθετα ${fmtM(y)} m`; $('nReset').disabled = !(x || y); }
+  document.querySelectorAll('.nudge .pad button').forEach(b => b.onclick = async () => {
+    const [ux, uy] = toWorld(b.dataset.d.split(',').map(Number), st.rot[st.pav] || 0), k = +$('nStep').value, [x, y] = st.shift[st.pav] || [0, 0];
+    st.shift[st.pav] = [Math.round((x + ux * k) * 1000) / 1000, Math.round((y + uy * k) * 1000) / 1000]; shiftLabel(); await renderSheet();
+  });
+  $('nReset').onclick = async () => { delete st.shift[st.pav]; shiftLabel(); await renderSheet(); };
   const LW_MIN = 0.25, LW_MAX = 4;
   function setLw(v) { st.lw = Math.round(Math.min(LW_MAX, Math.max(LW_MIN, v)) * 100) / 100; $('lwVal').textContent = Math.round(st.lw * 100) + '%'; $('lwMinus').disabled = st.lw <= LW_MIN; $('lwPlus').disabled = st.lw >= LW_MAX; renderSheet(); }
   $('lwMinus').onclick = () => setLw(st.lw - (st.lw > 1 ? 0.25 : 0.125));

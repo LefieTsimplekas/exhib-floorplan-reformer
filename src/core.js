@@ -292,10 +292,12 @@ const FP = (() => {
       else L.geo++;
       if (e.type === 'INSERT') for (const a of (e.attribs || [])) { if (!a.text || !a.text.text) continue; const A = layers[a.layer] || (layers[a.layer] = { name: a.layer, geo: 0, texts: [] }); (A.attrs || (A.attrs = [])).push(fix1253(clean(a.text.text))); }
     }
-    const xnames = new Set(db.tables.BLOCK_RECORD.entries.filter(b => (b.flags || 0) & 4).map(b => b.name));
-    const xrefs = db.entities.filter(e => e.type === 'INSERT' && xnames.has(e.name)).map(e => ({
-      name: e.name, offset: [e.insertionPoint.x, e.insertionPoint.y], scale: e.xScale ?? 1, rotation: e.rotation || 0
-    }));
+    const xrecs = {}; for (const b of db.tables.BLOCK_RECORD.entries) if ((b.flags || 0) & 4) xrecs[b.name] = b;
+    // the xref's base point (its INSBASE) maps onto the insertion point: world = ins + R·S·(p − base)
+    const xrefs = db.entities.filter(e => e.type === 'INSERT' && xrecs[e.name]).map(e => {
+      const bp = xrecs[e.name].basePoint;
+      return { name: e.name, offset: [e.insertionPoint.x, e.insertionPoint.y], scale: e.xScale ?? 1, yscale: e.yScale ?? e.xScale ?? 1, rotation: e.rotation || 0, base: bp ? [bp.x || 0, bp.y || 0] : null };
+    });
     return { ms, layers: Object.values(layers), xrefs };
   }
 
@@ -338,7 +340,8 @@ const FP = (() => {
     let G = collect(host.db, host.db.entities.filter(e => e.ownerBlockRecordSoftId === host.ms));
     for (const x of xrefDbs) {
       const ms = modelSpaceId(x.db);
-      const XG = collect(x.db, x.db.entities.filter(e => e.ownerBlockRecordSoftId === ms), [x.offset[0], x.offset[1], x.scale, x.scale, x.rotation, 0, 0]);
+      const ib = x.db.header && x.db.header.INSBASE, base = x.base || (ib ? [ib.x || 0, ib.y || 0] : [0, 0]);
+      const XG = collect(x.db, x.db.entities.filter(e => e.ownerBlockRecordSoftId === ms), [x.offset[0], x.offset[1], x.scale, x.yscale ?? x.scale, x.rotation, base[0], base[1]]);
       XG.forEach(g => g.xref = true); G = G.concat(XG);
     }
     return G;
@@ -348,8 +351,12 @@ const FP = (() => {
     const WL = new Set(cfg.wall_layers), SL = new Set(cfg.stand_layers);
     let src = G.filter(g => g.pts && WL.has(g.layer));
     if (src.length < 5) src = G.filter(g => g.pts && SL.has(g.layer));
-    const xs = [], ys = []; for (const g of src) for (const p of g.pts) { xs.push(p[0]); ys.push(p[1]); }
-    return [pct(xs, 0.5) - 3, pct(ys, 0.5) - 3, pct(xs, 99.5) + 3, pct(ys, 99.5) + 3];
+    const box = arr => { const xs = [], ys = []; for (const g of arr) for (const p of g.pts) { xs.push(p[0]); ys.push(p[1]); } return [pct(xs, 0.5) - 3, pct(ys, 0.5) - 3, pct(xs, 99.5) + 3, pct(ys, 99.5) + 3]; };
+    const B = box(src);
+    // stands just outside the walls (e.g. at an entrance) still belong to the plan: widen by the stand drawing, but only by a few metres
+    const sg = G.filter(g => g.pts && SL.has(g.layer));
+    if (sg.length && src !== sg) { const S = box(sg), lim = 15; B[0] = Math.max(Math.min(B[0], S[0]), B[0] - lim); B[1] = Math.max(Math.min(B[1], S[1]), B[1] - lim); B[2] = Math.min(Math.max(B[2], S[2]), B[2] + lim); B[3] = Math.min(Math.max(B[3], S[3]), B[3] + lim); }
+    return B;
   }
 
   function detect(G, cfg) {
@@ -526,10 +533,14 @@ const FP = (() => {
     const rings = res.stands.map(s => s.poly).concat(res.extra).map(p => { const R = ringOf(p), e = p.getEnvelopeInternal(); return { R, e: [e.getMinX(), e.getMinY(), e.getMaxX(), e.getMaxY()] }; });
     const [bx0, by0, bx1, by1] = cfg.building;
     const cb = axis === 'y' ? [bx0, P.min, bx1, P.max] : [P.min, by0, P.max, by1];
-    const walls0 = [];
-    for (const pts of res.WG) walls0.push(...clipWall(pts, cb, rings, 0.04));
     // optional rotation of the sheet in steps of 90° (counter-clockwise): the geometry turns, codes are then placed upright
     const rot = (((opts.rotate || 0) % 360) + 360) % 360;
+    // optional manual shift of all stands against the building, in drawing units (before rotation):
+    // done by moving the walls the opposite way, so stand keys, labels and renames stay untouched
+    const [sdx, sdy] = opts.shift || [0, 0];
+    const wsh = [-sdx, -sdy];
+    const walls0 = [];
+    for (const pts of res.WG) walls0.push(...clipWall((sdx || sdy) ? pts.map(([x, y]) => [x + wsh[0], y + wsh[1]]) : pts, cb, rings, 0.04));
     const rp = rot === 90 ? ([x, y]) => [-y, x] : rot === 180 ? ([x, y]) => [-x, -y] : rot === 270 ? ([x, y]) => [y, -x] : (q => q);
     const rpoly = p => rot ? GF.createPolygon(GF.createLinearRing(p.getExteriorRing().getCoordinates().map(c => { const [x, y] = rp([c.x, c.y]); return new Co(x, y); }))) : p;
     const RS = res.stands.map(t => rot ? { ...t, poly: rpoly(t.poly), lp: PT(...rp([t.lp.getX(), t.lp.getY()])) } : t);

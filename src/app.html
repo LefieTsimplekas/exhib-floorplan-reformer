@@ -105,6 +105,9 @@ details[open] > summary::before{transform:rotate(45deg)}
 .tab[aria-selected="true"]{background:var(--ink);color:var(--sheet);border-color:var(--ink)}
 .viewer-head{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center;margin-bottom:12px}
 #rotBtn{margin-left:auto}
+.nudge{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:-4px 0 12px}
+.nudge .pad{display:inline-flex;gap:4px}.nudge .pad button{min-width:32px;padding:4px 8px;font-weight:600}
+.nudge select{font:inherit;padding:2px 4px}.nudge label{display:inline-flex;align-items:center;gap:6px}.nudge output{font-variant-numeric:tabular-nums;color:var(--ink-2)}
 .lw{display:inline-flex;align-items:center;gap:4px}.lw button{min-width:28px;padding:4px 8px;font-weight:600}.lw output{min-width:42px;text-align:center;font-variant-numeric:tabular-nums;font-size:13px}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
 .seg button{border:0;border-radius:0;padding:6px 12px}
@@ -224,6 +227,18 @@ details[open] > summary::before{transform:rotate(45deg)}
               <button type="button" id="vSite" aria-pressed="false">Site</button>
             </div>
           </div>
+          <div class="nudge" role="group" aria-label="Μετακίνηση όλων των stand">
+            <span class="small muted">Μετακίνηση όλων των stand ως προς τους τοίχους</span>
+            <div class="pad">
+              <button type="button" class="ghost" data-d="0,1" aria-label="Πάνω" title="Πάνω">↑</button>
+              <button type="button" class="ghost" data-d="-1,0" aria-label="Αριστερά" title="Αριστερά">←</button>
+              <button type="button" class="ghost" data-d="0,-1" aria-label="Κάτω" title="Κάτω">↓</button>
+              <button type="button" class="ghost" data-d="1,0" aria-label="Δεξιά" title="Δεξιά">→</button>
+            </div>
+            <label class="small muted">Βήμα <select id="nStep"><option value="0.05">5 cm</option><option value="0.1">10 cm</option><option value="0.25" selected>25 cm</option><option value="0.5">50 cm</option><option value="1">1 m</option></select></label>
+            <output id="nVal" class="small">0,00 m · 0,00 m</output>
+            <button type="button" id="nReset" class="ghost small" disabled>Επαναφορά</button>
+          </div>
           <div class="sheetbox" id="sheet"></div>
           <div class="callout" id="xEdit" hidden style="margin-top:12px;background:var(--accent-soft);color:var(--ink)"></div>
           <div class="dl">
@@ -265,7 +280,7 @@ window.dispatchEvent(new Event('dwg-ready'));
 <script>
 (() => {
   const $ = id => document.getElementById(id);
-  const st = { host: null, sv: null, xrefNeed: [], xrefs: [], G: null, cfg: null, res: null, rep: null, pav: null, variant: 'GALAXY', layouts: {}, fileName: '', site: { img: null, w: 0, h: 0, fmt: 'PNG', pos: 'top', size: 'M' }, rot: {}, lw: 1 };
+  const st = { host: null, sv: null, xrefNeed: [], xrefs: [], G: null, cfg: null, res: null, rep: null, pav: null, variant: 'GALAXY', layouts: {}, fileName: '', site: { img: null, w: 0, h: 0, fmt: 'PNG', pos: 'top', size: 'M' }, rot: {}, lw: 1, shift: {}, step: 0.25 };
   let lib = null, dl = null;
 
   // ---------- capabilities ----------
@@ -354,7 +369,7 @@ window.dispatchEvent(new Event('dwg-ready'));
       c.append(lab, skip); box.appendChild(c);
       wireDrop(lab, lab.querySelector('input'), async f => {
         try { status($('status1'), 'Ανάγνωση αρχείου κτιρίου…', true); await tick();
-          const db = await readDwg(f); st.xrefs.push({ name: x.name, db, offset: x.offset, scale: x.scale, rotation: x.rotation });
+          const db = await readDwg(f); st.xrefs.push({ name: x.name, db, offset: x.offset, scale: x.scale, yscale: x.yscale, rotation: x.rotation, base: x.base });
           renderXref(); if (!st.xrefNeed.some(y => !st.xrefs.some(z => z.name === y.name))) await analyze(true);
         } catch (e) { status($('status1'), 'Δεν μπόρεσα να διαβάσω το αρχείο του κτιρίου.'); }
       });
@@ -529,13 +544,14 @@ window.dispatchEvent(new Event('dwg-ready'));
   }
   function getLayout(pav, site) {
     const rot = st.rot[pav] || 0;
-    const baseKey = pav + (rot ? `|r${rot}` : '');
-    if (!st.layouts[baseKey]) st.layouts[baseKey] = FP.layout(st.res, st.cfg, pav, measure, { rotate: rot, autoLandscape: !!rot });
+    const sh = st.shift[pav] || [0, 0], shifted = !!(sh[0] || sh[1]);
+    const baseKey = pav + (rot ? `|r${rot}` : '') + (shifted ? `|s${sh[0].toFixed(3)},${sh[1].toFixed(3)}` : '');
+    if (!st.layouts[baseKey]) st.layouts[baseKey] = FP.layout(st.res, st.cfg, pav, measure, { rotate: rot, autoLandscape: !!rot, shift: sh });
     if (!site) return st.layouts[baseKey];
     // site version: same page orientation as the plain sheet, image band on that page
     const base = st.layouts[baseKey]; if (!base) return null;
     const b = siteBand(base.page), key = `${baseKey}|site|${st.site.pos}|${b.reserve.toFixed(1)}`;
-    const opts = { rotate: rot, page: base.page, ...(st.site.pos === 'bottom' ? { reserveBottom: b.reserve } : { reserveTop: b.reserve }) };
+    const opts = { rotate: rot, shift: sh, page: base.page, ...(st.site.pos === 'bottom' ? { reserveBottom: b.reserve } : { reserveTop: b.reserve }) };
     if (!st.layouts[key]) st.layouts[key] = FP.layout(st.res, st.cfg, pav, measure, opts);
     return st.layouts[key];
   }
@@ -600,7 +616,7 @@ window.dispatchEvent(new Event('dwg-ready'));
     const D = getLayout(st.pav, isSite());
     box.innerHTML = D ? toSVG(D, st.variant, true) : '<p class="muted">Δεν υπάρχει τίποτα σε αυτό το περίπτερο.</p>';
     $('dlSite').disabled = !st.site.img || !st.res;
-    renderExtraEditor(); rotLabel();
+    renderExtraEditor(); rotLabel(); shiftLabel();
     $('fnames').textContent = `${fname(st.pav, 'XARTHS')}  ·  ${fname(st.pav, 'GALAXY')}${st.site.img ? '  ·  ' + fname(st.pav, 'SITE') : ''}`;
     $('dlPdf').textContent = 'Λήψη PDF (μαύρο)'; $('dlJpg').textContent = 'Λήψη JPG (μπλε)';
   }
@@ -628,6 +644,16 @@ window.dispatchEvent(new Event('dwg-ready'));
   }
   const setVariant = v => { st.variant = v; [['vBlue', 'GALAXY'], ['vBlack', 'XARTHS'], ['vSite', 'SITE']].forEach(([id, k]) => $(id).setAttribute('aria-pressed', String(k === v))); renderSheet(); };
   const rotLabel = () => { const r = st.rot[st.pav] || 0; $('rotLbl').textContent = r ? `Περιστροφή · ${r}°` : 'Περιστροφή 90°'; };
+  const fmtM = v => (v >= 0 ? '' : '−') + Math.abs(v).toFixed(2).replace('.', ',');
+  // the shift is kept in drawing coordinates, so it survives rotation; arrows and readout follow the screen
+  const toScreen = ([x, y], r) => r === 90 ? [-y, x] : r === 180 ? [-x, -y] : r === 270 ? [y, -x] : [x, y];
+  const toWorld = ([x, y], r) => r === 90 ? [y, -x] : r === 180 ? [-x, -y] : r === 270 ? [-y, x] : [x, y];
+  function shiftLabel() { const [x, y] = toScreen(st.shift[st.pav] || [0, 0], st.rot[st.pav] || 0); $('nVal').textContent = `οριζόντια ${fmtM(x)} m · κάθετα ${fmtM(y)} m`; $('nReset').disabled = !(x || y); }
+  document.querySelectorAll('.nudge .pad button').forEach(b => b.onclick = async () => {
+    const [ux, uy] = toWorld(b.dataset.d.split(',').map(Number), st.rot[st.pav] || 0), k = +$('nStep').value, [x, y] = st.shift[st.pav] || [0, 0];
+    st.shift[st.pav] = [Math.round((x + ux * k) * 1000) / 1000, Math.round((y + uy * k) * 1000) / 1000]; shiftLabel(); await renderSheet();
+  });
+  $('nReset').onclick = async () => { delete st.shift[st.pav]; shiftLabel(); await renderSheet(); };
   const LW_MIN = 0.25, LW_MAX = 4;
   function setLw(v) { st.lw = Math.round(Math.min(LW_MAX, Math.max(LW_MIN, v)) * 100) / 100; $('lwVal').textContent = Math.round(st.lw * 100) + '%'; $('lwMinus').disabled = st.lw <= LW_MIN; $('lwPlus').disabled = st.lw >= LW_MAX; renderSheet(); }
   $('lwMinus').onclick = () => setLw(st.lw - (st.lw > 1 ? 0.25 : 0.125));
