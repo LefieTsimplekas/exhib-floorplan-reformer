@@ -256,10 +256,10 @@ details[open] > summary::before{transform:rotate(45deg)}
           <div class="dl"><span class="fname" id="fnames"></span></div>
           <div class="sitebox" id="siteBox">
             <div class="step" style="margin:0"><b>SITE</b><h2>Κάτοψη site</h2></div>
-            <p class="small muted" style="margin:6px 0 10px">PDF με μπλε κατόψεις και μια δική σας εικόνα: λογότυπο της έκθεσης ή εικόνα με πληροφορίες. Μπαίνει πάνω ή κάτω από την κάτοψη, χωρίς να την καλύπτει.</p>
+            <p class="small muted" style="margin:6px 0 10px">PDF με μπλε κατόψεις και μια δική σας εικόνα: λογότυπο της έκθεσης ή εικόνα με πληροφορίες. Μπαίνει σε όποια θέση διαλέξετε (πάνω, κάτω ή στο πλάι) και η κάτοψη μικραίνει όσο χρειάζεται ώστε να μην καλύπτεται.</p>
             <div class="row">
               <label class="drop" id="dropImg" style="flex:1 1 220px;padding:12px"><input type="file" id="fileImg" accept="image/png,image/jpeg,image/webp,image/svg+xml"><strong id="imgLabel">Επιλέξτε εικόνα</strong><span class="muted">PNG, JPG, WEBP ή SVG</span></label>
-              <label class="field" style="width:120px">Θέση<select id="imgPos"><option value="top">Πάνω</option><option value="bottom">Κάτω</option></select></label>
+              <label class="field" style="width:150px">Θέση<select id="imgPos"><option value="top">Πάνω (κέντρο)</option><option value="tl">Πάνω αριστερά</option><option value="tr">Πάνω δεξιά</option><option value="ml">Μέση αριστερά</option><option value="mr">Μέση δεξιά</option><option value="bl">Κάτω αριστερά</option><option value="br">Κάτω δεξιά</option><option value="bottom">Κάτω (κέντρο)</option></select></label>
               <label class="field" style="width:120px">Μέγεθος<select id="imgSize"><option value="S">Μικρό</option><option value="M" selected>Μεσαίο</option><option value="L">Μεγάλο</option></select></label>
             </div>
             <div class="dl"><button type="button" class="primary" id="dlSite" disabled>Λήψη κάτοψης site (PDF)</button><button type="button" class="ghost" id="imgClear" hidden>Αφαίρεση εικόνας</button></div>
@@ -596,10 +596,17 @@ window.dispatchEvent(new Event('dwg-ready'));
   const SIZES = { S: 45, M: 75, L: 110 }, MARGIN_X = 0.06 * 297, MARGIN_Y = 0.042 * 420, GAP = 6;
   function siteBand(pg = { W: 297, H: 420 }) {
     const S = st.site, maxH = (SIZES[S.size] || 75) * (pg.H < pg.W ? 0.8 : 1), mx = 0.06 * pg.W, my = 0.042 * pg.H, availW = pg.W - 2 * mx;
-    const ar = S.img ? S.w / S.h : 4;
-    let bh = Math.min(maxH, availW / ar), bw = bh * ar;
-    const x = (pg.W - bw) / 2, y = S.pos === 'bottom' ? pg.H - my - bh : my;
-    return { x, y, w: bw, h: bh, reserve: bh + GAP };
+    const ar = S.img ? S.w / S.h : 4, pos = S.pos || 'top';
+    if (pos === 'top' || pos === 'bottom') {
+      const bh = Math.min(maxH, availW / ar), bw = bh * ar;
+      return { pos, x: (pg.W - bw) / 2, y: pos === 'bottom' ? pg.H - my - bh : my, w: bw, h: bh, reserve: bh + GAP };
+    }
+    // corner / side: at most ~45% of the page width, so the plan keeps room beside it
+    const bh = Math.min(maxH, 0.45 * availW / ar, pg.H - 2 * my), bw = bh * ar;
+    const [v, hz] = [pos[0], pos[1]]; // t|m|b , l|r
+    const x = hz === 'l' ? mx : pg.W - mx - bw;
+    const y = v === 't' ? my : v === 'b' ? pg.H - my - bh : (pg.H - bh) / 2;
+    return { pos, x, y, w: bw, h: bh, reserve: bh + GAP, side: bw + GAP };
   }
   function getLayout(pav, site) {
     const rot = st.rot[pav] || 0;
@@ -609,9 +616,17 @@ window.dispatchEvent(new Event('dwg-ready'));
     if (!site) return st.layouts[baseKey];
     // site version: same page orientation as the plain sheet, image band on that page
     const base = st.layouts[baseKey]; if (!base) return null;
-    const b = siteBand(base.page), key = `${baseKey}|site|${st.site.pos}|${b.reserve.toFixed(1)}`;
-    const opts = { rotate: rot, shift: sh, page: base.page, ...(st.site.pos === 'bottom' ? { reserveBottom: b.reserve } : { reserveTop: b.reserve }) };
-    if (!st.layouts[key]) st.layouts[key] = FP.layout(st.res, st.cfg, pav, measure, opts);
+    const b = siteBand(base.page), key = `${baseKey}|site|${b.pos}|${b.reserve.toFixed(1)}`;
+    if (!st.layouts[key]) {
+      const o = { rotate: rot, shift: sh, page: base.page }, mk = extra => FP.layout(st.res, st.cfg, pav, measure, { ...o, ...extra });
+      // the plan never sits under the image: keep free a band above/below it, or a column beside it — whichever leaves the plan larger
+      const cands = [];
+      if (b.pos === 'top' || b.pos[0] === 't') cands.push({ reserveTop: b.reserve });
+      if (b.pos === 'bottom' || b.pos[0] === 'b') cands.push({ reserveBottom: b.reserve });
+      if (b.side) cands.push(b.pos[1] === 'l' ? { reserveLeft: b.side } : { reserveRight: b.side });
+      let best = null; for (const c of cands) { const L = mk(c); if (L && (!best || L.scale > best.scale)) best = L; }
+      st.layouts[key] = best;
+    }
     return st.layouts[key];
   }
   const style = v => v === 'XARTHS' ? { stand: '#000000', slw: 0.6 * st.lw } : { stand: '#0000ff', slw: 0.9 * st.lw };

@@ -558,7 +558,8 @@ const FP = (() => {
     let PW = A3.W, PH = A3.H;
     if (opts.page) { PW = opts.page.W; PH = opts.page.H; }
     else if (opts.autoLandscape && (x1 - x0) > (y1 - y0)) { PW = A3.H; PH = A3.W; }
-    const m = 0.06, axL = m * PW, axW = (1 - 2 * m) * PW;
+    const rL = opts.reserveLeft || 0, rR = opts.reserveRight || 0;
+    const m = 0.06, axL = m * PW + rL, axW = (1 - 2 * m) * PW - rL - rR;
     // optional space kept free above/below the plan (mm), e.g. for an exhibition image on the site version
     const rT = opts.reserveTop || 0, rB = opts.reserveBottom || 0;
     const axB = 0.7 * m * PH + rB, axH = (1 - 1.4 * m) * PH - rT - rB;
@@ -567,7 +568,7 @@ const FP = (() => {
     const X = x => offX + (x - x0) * s, Y = y => PH - (offB + (y - y0) * s);
     const tr = pts => pts.map(([x, y]) => [X(x), Y(y)]);
     const ptu = s / MMPT; // points per drawing unit
-    const D = { page: { W: PW, H: PH }, walls: walls.map(tr), stands: allp.map(p => tr(p.getExteriorRing().getCoordinates().map(c => [c.x, c.y]))), texts: [],
+    const D = { page: { W: PW, H: PH }, scale: s, walls: walls.map(tr), stands: allp.map(p => tr(p.getExteriorRing().getCoordinates().map(c => [c.x, c.y]))), texts: [],
       extras: ex.map(p => ({ key: p.__key, pts: tr(p.getExteriorRing().getCoordinates().map(c => [c.x, c.y])) })) };
     const MAXF = cfg.max_font ?? 22, MINF = cfg.min_font ?? 7, OUTF = cfg.outside_font ?? 11, OUTMIN = 5.5;
     // obstacles for labels placed outside: every stand (all pavilions), walls of this sheet, labels already placed
