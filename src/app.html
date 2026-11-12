@@ -60,6 +60,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .drop input{position:absolute;opacity:0;width:1px;height:1px}
 .drop strong{display:block;font:600 15px var(--f-display)}
 .drop .muted{font-size:12.5px}
+.drop-sm{margin-top:10px;padding:12px}.drop-sm strong{font-size:14px}.drop-sm.done{border-style:solid;border-color:var(--accent)}
 .status{font-size:13px;margin-top:10px;display:flex;gap:8px;align-items:center;min-height:20px}
 .spin{width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:sp 0.8s linear infinite;flex:none}
 @keyframes sp{to{transform:rotate(360deg)}}
@@ -152,6 +153,12 @@ details[open] > summary::before{transform:rotate(45deg)}
           <strong>Επιλέξτε ή σύρετε εδώ το DWG</strong>
           <span class="muted">Από AutoCAD ή ActCAD, μορφή DWG 2000 έως 2018+.</span>
         </label>
+        <label class="drop drop-sm" id="drop2">
+          <input type="file" id="file2" accept=".pdf,.zip,.json">
+          <strong>Προηγούμενη εργασία <span class="muted" style="font-weight:400">(προαιρετικό)</span></strong>
+          <span class="muted">Το PDF ή το ZIP που είχατε κατεβάσει από την εφαρμογή: επανέρχονται όλες οι αλλαγές σας.</span>
+        </label>
+        <div class="status" id="status2"></div>
         <div class="status" id="status1"></div>
         <div id="xrefBox" hidden></div>
         <div id="nameBox" hidden style="margin-top:12px">
@@ -280,7 +287,7 @@ window.dispatchEvent(new Event('dwg-ready'));
 <script>
 (() => {
   const $ = id => document.getElementById(id);
-  const st = { host: null, sv: null, xrefNeed: [], xrefs: [], G: null, cfg: null, res: null, rep: null, pav: null, variant: 'GALAXY', layouts: {}, fileName: '', site: { img: null, w: 0, h: 0, fmt: 'PNG', pos: 'top', size: 'M' }, rot: {}, lw: 1, shift: {}, step: 0.25 };
+  const st = { host: null, sv: null, xrefNeed: [], xrefs: [], G: null, cfg: null, res: null, rep: null, pav: null, variant: 'GALAXY', layouts: {}, fileName: '', site: { img: null, w: 0, h: 0, fmt: 'PNG', pos: 'top', size: 'M' }, rot: {}, lw: 1, shift: {}, step: 0.25, prev: null };
   let lib = null, dl = null;
 
   // ---------- capabilities ----------
@@ -376,6 +383,58 @@ window.dispatchEvent(new Event('dwg-ready'));
     }
   }
 
+  // ---------- saved work: the settings travel inside every PDF the app makes ----------
+  const SET_TAG = 'FPSET1:';
+  const b64u = str => { const b = new TextEncoder().encode(str); let s = ''; for (let i = 0; i < b.length; i += 32768) s += String.fromCharCode.apply(null, b.subarray(i, i + 32768)); return btoa(s); };
+  const unb64u = b => new TextDecoder().decode(Uint8Array.from(atob(b), c => c.charCodeAt(0)));
+  function snapshot() {
+    if (!st.cfg) return null;
+    return { app: 'OCR Floorplan Maker', v: 1, saved: new Date().toISOString(), dwg: st.fileName, exName: $('exName').value.trim(), cfg: st.cfg, rot: st.rot, shift: st.shift, lw: st.lw, site: { pos: st.site.pos, size: st.site.size } };
+  }
+  function parsePrevText(txt) {
+    const t = txt.trim();
+    if (t.startsWith('{')) { const o = JSON.parse(t); if (o && o.cfg) return o; }
+    const m = txt.match(/FPSET1:([A-Za-z0-9+\/=]+)/); if (m) { const o = JSON.parse(unb64u(m[1])); if (o && o.cfg) return o; }
+    return null;
+  }
+  async function readPrev(file) {
+    const latin = buf => { const b = new Uint8Array(buf); let s = ''; for (let i = 0; i < b.length; i += 32768) s += String.fromCharCode.apply(null, b.subarray(i, i + 32768)); return s; };
+    if (/\.zip$/i.test(file.name)) {
+      const z = await JSZip.loadAsync(await file.arrayBuffer());
+      for (const f of Object.values(z.files)) if (/\.(pdf|json)$/i.test(f.name)) { const o = parsePrevText(latin(await f.async('arraybuffer'))); if (o) return o; }
+      return null;
+    }
+    if (/\.json$/i.test(file.name)) return parsePrevText(await file.text());
+    return parsePrevText(latin(await file.arrayBuffer()));
+  }
+  function applyPrev() {
+    const P = st.prev; if (!P) return;
+    st.cfg = JSON.parse(JSON.stringify(P.cfg));
+    st.cfg.splits = st.cfg.splits || []; st.cfg.renames = st.cfg.renames || [];
+    st.cfg.building = FP.guessBuilding(st.G, st.cfg);
+    st.res = FP.detect(st.G, st.cfg);
+    st.rot = { ...(P.rot || {}) }; st.shift = JSON.parse(JSON.stringify(P.shift || {})); st.lw = P.lw || 1;
+    $('lwVal').textContent = Math.round(st.lw * 100) + '%';
+    if (P.site) { st.site.pos = P.site.pos || 'top'; st.site.size = P.site.size || 'M'; $('imgPos').value = st.site.pos; $('imgSize').value = st.site.size; }
+    if (P.exName) $('exName').value = P.exName;
+    renderLayers();
+    const d = new Date(P.saved), when = isNaN(d) ? '' : ` (αποθήκευση ${d.toLocaleDateString('el-GR')}, ${d.toLocaleTimeString('el-GR', { hour: '2-digit', minute: '2-digit', hour12: false })})`;
+    const other = P.dwg && st.fileName && P.dwg !== st.fileName ? ` Προσοχή: είχαν φτιαχτεί για το «${P.dwg}».` : '';
+    status($('status2'), `Επανήλθαν οι αλλαγές${when}.${other}`);
+    toast('Επανήλθαν οι προηγούμενες αλλαγές.');
+  }
+  wireDrop($('drop2'), $('file2'), async file => {
+    const s2 = $('status2');
+    try {
+      status(s2, 'Ανάγνωση…', true); await tick();
+      const o = await readPrev(file);
+      if (!o) { status(s2, 'Αυτό το αρχείο δεν έχει αποθηκευμένες ρυθμίσεις. Χρειάζεται PDF ή ZIP που κατέβηκε από αυτή την εφαρμογή (από αυτή την έκδοση και μετά).'); $('drop2').classList.remove('done'); return; }
+      st.prev = o; $('drop2').classList.add('done');
+      if (st.G && st.cfg) { applyPrev(); await analyze(false); }
+      else status(s2, `Έτοιμο: οι αλλαγές για το «${o.dwg || 'σχέδιο'}» θα εφαρμοστούν μόλις ανεβάσετε το DWG.`);
+    } catch (e) { console.error(e); status(s2, 'Δεν μπόρεσα να διαβάσω αυτό το αρχείο.'); }
+  });
+
   // ---------- analysis ----------
   async function analyze(fresh) {
     const s1 = $('status1');
@@ -396,7 +455,7 @@ window.dispatchEvent(new Event('dwg-ready'));
       st.cfg.pavilions = FP.guessPavilions(res, st.cfg, st.cfg.axis);
       // no "ΠΕΡΙΠΤΕΡΟ" label in the drawing: take the pavilion number from the file name (HALL_13.dwg -> 13)
       if (st.cfg.pavilions.length === 1 && !res.pavLabels.length) { const m = st.fileName.replace(/\.dwg$/i, '').match(/(?:^|[^0-9])(\d{1,3})(?=$|[^0-9])/); if (m) st.cfg.pavilions[0].name = m[1].padStart(2, '0'); }
-      renderLayers();
+      if (st.prev) applyPrev(); else renderLayers();
     } else {
       st.res = FP.detect(st.G, st.cfg);
     }
@@ -588,6 +647,7 @@ window.dispatchEvent(new Event('dwg-ready'));
     doc.addFileToVFS('StandSans-Bold.ttf', FONT_B64); doc.addFont('StandSans-Bold.ttf', 'StandSans', 'bold');
     doc.setFont('StandSans', 'bold'); doc.setTextColor(17, 17, 17);
     for (const t of D.texts) { doc.setFontSize(t.size); const lh = t.size * PT * 1.15, n = t.lines.length; t.lines.forEach((ln, i) => doc.text(ln, t.x, t.y + (i - (n - 1) / 2) * lh, { align: 'center', baseline: 'middle' })); }
+    const snap = snapshot(); if (snap) doc.setProperties({ creator: 'OCR Floorplan Maker', subject: 'Κάτοψη stand', keywords: SET_TAG + b64u(JSON.stringify(snap)) });
     return doc.output('blob');
   }
   function toJPG(D, v) {
