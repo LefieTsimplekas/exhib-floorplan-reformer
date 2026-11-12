@@ -116,7 +116,8 @@ details[open] > summary::before{transform:rotate(45deg)}
 .sheetbox{background:var(--line-2);border-radius:8px;padding:clamp(8px,2vw,24px);display:flex;justify-content:center}
 .sheetbox svg{background:#fff;box-shadow:0 1px 2px rgba(10,20,40,.12),0 8px 24px rgba(10,20,40,.10);width:100%;max-width:640px;height:auto}
 .sheetbox svg[style*="420/297"]{max-width:900px}
-.xbox{fill:transparent;stroke:none;cursor:pointer}
+.xbox,.lbox{fill:transparent;stroke:none;cursor:pointer}
+.lbox:hover{fill:rgba(38,56,255,.10)}.lbox.sel{fill:rgba(38,56,255,.16);stroke:#2638ff;stroke-width:.6;stroke-dasharray:1.5 1}
 .xbox:hover{fill:rgba(38,56,255,.10)}
 .xbox.sel{fill:rgba(38,56,255,.16);stroke:#2638ff;stroke-width:.6;stroke-dasharray:1.5 1}
 .sitebox{margin-top:18px;padding-top:14px;border-top:1px solid var(--line-2)}
@@ -232,6 +233,7 @@ details[open] > summary::before{transform:rotate(45deg)}
               <button type="button" id="vBlue" aria-pressed="true">Μπλε</button>
               <button type="button" id="vBlack" aria-pressed="false">Μαύρο</button>
               <button type="button" id="vSite" aria-pressed="false">Site</button>
+              <button type="button" id="vLogo" aria-pressed="false">Λογότυπα</button>
             </div>
           </div>
           <div class="nudge" role="group" aria-label="Μετακίνηση όλων των stand">
@@ -263,6 +265,19 @@ details[open] > summary::before{transform:rotate(45deg)}
               <label class="field" style="width:120px">Μέγεθος<select id="imgSize"><option value="S">Μικρό</option><option value="M" selected>Μεσαίο</option><option value="L">Μεγάλο</option></select></label>
             </div>
             <div class="dl"><button type="button" class="primary" id="dlSite" disabled>Λήψη κάτοψης site (PDF)</button><button type="button" class="ghost" id="imgClear" hidden>Αφαίρεση εικόνας</button></div>
+          </div>
+          <div class="sitebox" id="logoBox">
+            <div class="step" style="margin:0"><b>LOGO</b><h2>Κάτοψη με λογότυπα εκθετών</h2></div>
+            <p class="small muted" style="margin:6px 0 10px">Το λογότυπο κάθε εταιρείας μέσα στο κουτάκι του stand της, σε PDF για εκτύπωση (οι εικόνες μπαίνουν στην αρχική τους ανάλυση). Ανεβάστε πολλά μαζί: το όνομα του αρχείου είναι ο κωδικός του stand, π.χ. <span class="mono">B02.png</span> ή <span class="mono">B02 Εταιρεία.jpg</span>. Για συγκεκριμένο περίπτερο: <span class="mono">08_B02.png</span>. Ή πατήστε ένα stand στην προβολή «Λογότυπα» για να του δώσετε λογότυπο.</p>
+            <div class="row">
+              <label class="drop" id="dropLogos" style="flex:1 1 220px;padding:12px"><input type="file" id="fileLogos" multiple accept="image/png,image/jpeg,image/webp,image/svg+xml"><strong>Επιλέξτε λογότυπα</strong><span class="muted">PNG, JPG, WEBP ή SVG · πολλά μαζί</span></label>
+              <label class="small" style="display:flex;align-items:center;gap:6px;flex:0 1 220px"><input type="checkbox" id="logoCode" checked> Ο κωδικός του stand μένει πάνω από το λογότυπο</label>
+            </div>
+            <div class="small" id="logoCount" style="margin-top:8px"></div>
+            <div class="status small muted" id="logoStatus"></div>
+            <div class="callout" id="lEdit" hidden style="margin-top:10px;background:var(--accent-soft);color:var(--ink)"></div>
+            <input type="file" id="fileOneLogo" accept="image/png,image/jpeg,image/webp,image/svg+xml" hidden>
+            <div class="dl"><button type="button" class="primary" id="dlLogos" disabled>Λήψη κάτοψης με λογότυπα (PDF)</button><button type="button" class="ghost" id="logoClear" hidden>Αφαίρεση όλων των λογότυπων</button></div>
           </div>
           <div class="callout warn" id="noDl" hidden style="margin-top:10px">Σε αυτή την προβολή τα αρχεία δεν κατεβαίνουν αυτόματα. Το JPG μπορείτε να το πάρετε με «Λήψη JPG» και δεξί κλικ στην εικόνα. Για PDF και ZIP ανοίξτε τη σελίδα συνδεδεμένοι στο claude.ai.</div>
           <div class="callout warn" id="fallback" hidden style="margin-top:10px"></div>
@@ -939,6 +954,10 @@ const FP = (() => {
       if (got.r) placed.push(got.r);
     }
     for (const j of jobs) D.texts.push({ x: X(j.out.x), y: Y(j.out.y), lines: j.partsC, size: j.out.fs, code: j.st.code });
+    // every numbered box on the sheet (for per-stand content such as exhibitor logos)
+    const ringPts = p => tr(p.getExteriorRing().getCoordinates().map(c => [c.x, c.y]));
+    D.boxes = ss.map(t => ({ code: t.code, pts: ringPts(t.poly) }));
+    for (const j of freeJobs) if (!j.free) D.boxes.push({ code: j.code, pts: ringPts(j.poly) });
     return D;
   }
 
@@ -8097,7 +8116,7 @@ window.dispatchEvent(new Event('dwg-ready'));
 <script>
 (() => {
   const $ = id => document.getElementById(id);
-  const st = { host: null, sv: null, xrefNeed: [], xrefs: [], G: null, cfg: null, res: null, rep: null, pav: null, variant: 'GALAXY', layouts: {}, fileName: '', site: { img: null, w: 0, h: 0, fmt: 'PNG', pos: 'top', size: 'M' }, rot: {}, lw: 1, shift: {}, step: 0.25, prev: null };
+  const st = { host: null, sv: null, xrefNeed: [], xrefs: [], G: null, cfg: null, res: null, rep: null, pav: null, variant: 'GALAXY', layouts: {}, fileName: '', site: { img: null, w: 0, h: 0, fmt: 'PNG', pos: 'top', size: 'M' }, rot: {}, lw: 1, shift: {}, step: 0.25, prev: null, logos: {}, selLogo: null };
   let lib = null, dl = null;
 
   // ---------- capabilities ----------
@@ -8439,8 +8458,35 @@ window.dispatchEvent(new Event('dwg-ready'));
     }
     return st.layouts[key];
   }
-  const style = v => v === 'XARTHS' ? { stand: '#000000', slw: 0.6 * st.lw } : { stand: '#0000ff', slw: 0.9 * st.lw };
+  const style = v => (v === 'XARTHS' || v === 'LOGOS') ? { stand: '#000000', slw: 0.6 * st.lw } : { stand: '#0000ff', slw: 0.9 * st.lw };
   const PT = FP.MMPT, WALL_LW = 0.45;
+  // ---------- exhibitor logos inside the stand boxes ----------
+  const pip = (x, y, P) => { let c = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const [xi, yi] = P[i], [xj, yj] = P[j]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c; } return c; };
+  function logoPlan(D, pav) {
+    const out = { items: [], codes: new Set() };
+    for (const bx of D.boxes || []) {
+      const L = st.logos[pav + '|' + bx.code]; if (!L) continue;
+      const P = bx.pts; let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (const [x, y] of P) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+      const bw = x1 - x0, bh = y1 - y0, pad = 0.07 * Math.min(bw, bh);
+      let code = null, top = y0 + pad;
+      if ($('logoCode').checked) {
+        let fs = Math.max(3.5, Math.min(9, Math.min(bh * 0.13, bw * 0.3) / PT));
+        fs = Math.max(3, Math.min(fs, 0.85 * bw / (0.62 * bx.code.length * PT)));
+        const hmm = fs * PT; code = { x: (x0 + x1) / 2, y: y0 + pad * 0.6 + hmm * 0.55, size: fs, text: bx.code };
+        top = y0 + pad * 0.6 + hmm * 1.15 + pad * 0.4;
+      }
+      const ax0 = x0 + pad, ax1 = x1 - pad, ay0 = top, ay1 = y1 - pad; if (ax1 <= ax0 || ay1 <= ay0) continue;
+      const cx = (ax0 + ax1) / 2, cy = (ay0 + ay1) / 2, ar = L.w / L.h;
+      const ok = (w, h) => { const xs = [cx - w / 2, cx, cx + w / 2], ys = [cy - h / 2, cy, cy + h / 2]; for (const x of xs) for (const y of ys) if (!pip(x, y, P)) return false; return true; };
+      let hi = Math.min(ax1 - ax0, (ay1 - ay0) * ar), lo = 0; // width of the logo
+      if (ok(hi, hi / ar)) lo = hi; else for (let i = 0; i < 14; i++) { const m = (lo + hi) / 2; if (ok(m, m / ar)) lo = m; else hi = m; }
+      if (lo < 1) continue;
+      out.items.push({ key: pav + '|' + bx.code, L, x: cx - lo / 2, y: cy - lo / ar / 2, w: lo, h: lo / ar, code });
+      out.codes.add(bx.code);
+    }
+    return out;
+  }
   function toSVG(D, v, interactive) {
     const S = style(v), f = n => n.toFixed(2);
     const PG = D.page || { W: 297, H: 420 };
@@ -8452,16 +8498,21 @@ window.dispatchEvent(new Event('dwg-ready'));
       if (st.site.img) s += `<image href="${st.site.img}" x="${f(b.x)}" y="${f(b.y)}" width="${f(b.w)}" height="${f(b.h)}" preserveAspectRatio="xMidYMid meet"/>`;
       else s += `<rect x="${f(b.x)}" y="${f(b.y)}" width="${f(b.w)}" height="${f(b.h)}" fill="#f1f3fb" stroke="#2638ff" stroke-width=".4" stroke-dasharray="2 1.5"/><text x="${f(b.x + b.w / 2)}" y="${f(b.y + b.h / 2)}" font-family='${FONT}' font-size="6" fill="#2638ff" text-anchor="middle" dominant-baseline="central">Η εικόνα της έκθεσης μπαίνει εδώ</text>`;
     }
+    const LP = v === 'LOGOS' ? logoPlan(D, st.pav) : null;
+    if (LP) for (const it of LP.items) s += `<image href="${it.L.img}" x="${f(it.x)}" y="${f(it.y)}" width="${f(it.w)}" height="${f(it.h)}" preserveAspectRatio="xMidYMid meet"/>`;
     s += `<g font-family='${FONT}' font-weight="700" fill="#111" text-anchor="middle">`;
-    for (const t of D.texts) { const fs = t.size * PT, lh = fs * 1.15, n = t.lines.length; t.lines.forEach((ln, i) => { s += `<text x="${f(t.x)}" y="${f(t.y + (i - (n - 1) / 2) * lh)}" font-size="${f(fs)}" dominant-baseline="central">${esc(ln)}</text>`; }); }
+    if (LP) for (const it of LP.items) if (it.code) s += `<text x="${f(it.code.x)}" y="${f(it.code.y)}" font-size="${f(it.code.size * PT)}" dominant-baseline="central">${esc(it.code.text)}</text>`;
+    for (const t of D.texts) { if (LP && LP.codes.has(t.code)) continue; const fs = t.size * PT, lh = fs * 1.15, n = t.lines.length; t.lines.forEach((ln, i) => { s += `<text x="${f(t.x)}" y="${f(t.y + (i - (n - 1) / 2) * lh)}" font-size="${f(fs)}" dominant-baseline="central">${esc(ln)}</text>`; }); }
     s += '</g>';
-    if (interactive && D.extras) {
+    if (interactive && v === 'LOGOS') {
+      for (const bx of D.boxes || []) { const has = !!st.logos[st.pav + '|' + bx.code]; s += `<path class="lbox${bx.code === st.selLogo ? ' sel' : ''}" data-code="${esc(bx.code)}" d="M${bx.pts.map(q => f(q[0]) + ' ' + f(q[1])).join('L')}Z"><title>${esc(bx.code)}: ${has ? 'αλλαγή ή αφαίρεση λογότυπου' : 'κλικ για λογότυπο'}</title></path>`; }
+    } else if (interactive && D.extras) {
       const lab = st.cfg.extra_labels || {};
       for (const x of D.extras) s += `<path class="xbox${x.key === st.selExtra ? ' sel' : ''}${lab[x.key] ? ' has' : ''}" data-key="${x.key}" d="M${x.pts.map(q => f(q[0]) + ' ' + f(q[1])).join('L')}Z"><title>${lab[x.key] ? 'Αλλαγή κειμένου' : 'Κενό κουτί: κλικ για αριθμό ή κείμενο'}</title></path>`;
     }
     return s + '</svg>';
   }
-  function toPDF(D, v) {
+  function toPDF(D, v, pav = st.pav) {
     const PG = D.page || { W: 297, H: 420 };
     const S = style(v), { jsPDF } = window.jspdf, doc = new jsPDF({ orientation: PG.W > PG.H ? 'landscape' : 'portrait', unit: 'mm', format: 'a3' });
     doc.setLineCap('butt'); doc.setLineJoin('miter');
@@ -8471,7 +8522,12 @@ window.dispatchEvent(new Event('dwg-ready'));
     if (v === 'SITE' && st.site.img) { const b = siteBand(PG); doc.addImage(st.site.img, st.site.fmt, b.x, b.y, b.w, b.h, undefined, 'FAST'); }
     doc.addFileToVFS('StandSans-Bold.ttf', FONT_B64); doc.addFont('StandSans-Bold.ttf', 'StandSans', 'bold');
     doc.setFont('StandSans', 'bold'); doc.setTextColor(17, 17, 17);
-    for (const t of D.texts) { doc.setFontSize(t.size); const lh = t.size * PT * 1.15, n = t.lines.length; t.lines.forEach((ln, i) => doc.text(ln, t.x, t.y + (i - (n - 1) / 2) * lh, { align: 'center', baseline: 'middle' })); }
+    const LP = v === 'LOGOS' ? logoPlan(D, pav) : null;
+    if (LP) for (const it of LP.items) {
+      doc.addImage(it.L.img, it.L.fmt, it.x, it.y, it.w, it.h, it.L.alias, it.L.fmt === 'PNG' ? 'FAST' : 'NONE');
+      if (it.code) { doc.setFontSize(it.code.size); doc.text(it.code.text, it.code.x, it.code.y, { align: 'center', baseline: 'middle' }); }
+    }
+    for (const t of D.texts) { if (LP && LP.codes.has(t.code)) continue; doc.setFontSize(t.size); const lh = t.size * PT * 1.15, n = t.lines.length; t.lines.forEach((ln, i) => doc.text(ln, t.x, t.y + (i - (n - 1) / 2) * lh, { align: 'center', baseline: 'middle' })); }
     const snap = snapshot(); if (snap) doc.setProperties({ creator: 'OCR Floorplan Maker', subject: 'Κάτοψη stand', keywords: SET_TAG + b64u(JSON.stringify(snap)) });
     return doc.output('blob');
   }
@@ -8501,11 +8557,13 @@ window.dispatchEvent(new Event('dwg-ready'));
     const D = getLayout(st.pav, isSite());
     box.innerHTML = D ? toSVG(D, st.variant, true) : '<p class="muted">Δεν υπάρχει τίποτα σε αυτό το περίπτερο.</p>';
     $('dlSite').disabled = !st.site.img || !st.res;
-    renderExtraEditor(); rotLabel(); shiftLabel();
+    renderExtraEditor(); renderLogoEditor(); logoStatus(); rotLabel(); shiftLabel();
     $('fnames').textContent = `${fname(st.pav, 'XARTHS')}  ·  ${fname(st.pav, 'GALAXY')}${st.site.img ? '  ·  ' + fname(st.pav, 'SITE') : ''}`;
     $('dlPdf').textContent = 'Λήψη PDF (μαύρο)'; $('dlJpg').textContent = 'Λήψη JPG (μπλε)';
   }
   $('sheet').addEventListener('click', e => {
+    const lb = e.target.closest && e.target.closest('.lbox');
+    if (lb) { st.selLogo = lb.dataset.code; if (!st.logos[st.pav + '|' + st.selLogo]) $('fileOneLogo').click(); renderSheet(); return; }
     const p = e.target.closest && e.target.closest('.xbox'); if (!p) return;
     st.selExtra = p.dataset.key; renderSheet().then(() => { const i = $('xText'); if (i) { i.focus(); i.select(); } });
   });
@@ -8527,7 +8585,7 @@ window.dispatchEvent(new Event('dwg-ready'));
     inp.onkeydown = e => { if (e.key === 'Enter') apply(inp.value.trim()); if (e.key === 'Escape') cancel.onclick(); };
     row.append(ok, clr, cancel); box.append(lb, row);
   }
-  const setVariant = v => { st.variant = v; [['vBlue', 'GALAXY'], ['vBlack', 'XARTHS'], ['vSite', 'SITE']].forEach(([id, k]) => $(id).setAttribute('aria-pressed', String(k === v))); renderSheet(); };
+  const setVariant = v => { st.variant = v; [['vBlue', 'GALAXY'], ['vBlack', 'XARTHS'], ['vSite', 'SITE'], ['vLogo', 'LOGOS']].forEach(([id, k]) => $(id).setAttribute('aria-pressed', String(k === v))); renderSheet(); };
   const rotLabel = () => { const r = st.rot[st.pav] || 0; $('rotLbl').textContent = r ? `Περιστροφή · ${r}°` : 'Περιστροφή 90°'; };
   const fmtM = v => (v >= 0 ? '' : '−') + Math.abs(v).toFixed(2).replace('.', ',');
   // the shift is kept in drawing coordinates, so it survives rotation; arrows and readout follow the screen
@@ -8547,6 +8605,7 @@ window.dispatchEvent(new Event('dwg-ready'));
   $('vBlue').onclick = () => setVariant('GALAXY');
   $('vBlack').onclick = () => setVariant('XARTHS');
   $('vSite').onclick = () => setVariant('SITE');
+  $('vLogo').onclick = () => setVariant('LOGOS');
   // site image: normalised through a canvas (PNG keeps transparency; photos become JPEG to stay small)
   wireDrop($('dropImg'), $('fileImg'), async file => {
     if (!/^image\//.test(file.type)) { toast('Επιλέξτε αρχείο εικόνας (PNG, JPG, WEBP ή SVG).'); return; }
@@ -8565,6 +8624,78 @@ window.dispatchEvent(new Event('dwg-ready'));
   $('imgPos').onchange = () => { st.site.pos = $('imgPos').value; if (isSite()) renderSheet(); };
   $('imgSize').onchange = () => { st.site.size = $('imgSize').value; if (isSite()) renderSheet(); };
   $('imgClear').onclick = () => { st.site = { ...st.site, img: null, name: null }; $('imgLabel').textContent = 'Επιλέξτε εικόνα'; $('imgClear').hidden = true; $('fileImg').value = ''; renderSheet(); };
+  // logos: kept at their own resolution (PNG/JPEG as uploaded; SVG/WEBP drawn to a large PNG)
+  let logoSeq = 0;
+  async function loadLogo(file) {
+    const url = await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = no; r.readAsDataURL(file); });
+    const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = url; });
+    let w = img.naturalWidth, h = img.naturalHeight;
+    if (/^image\/(png|jpeg)$/.test(file.type) && w && h) return { img: url, fmt: file.type === 'image/png' ? 'PNG' : 'JPEG', w, h, name: file.name, alias: 'logo' + (++logoSeq) };
+    if (!w || !h) { w = 2400; h = 1200; }
+    const k = Math.max(1, 2400 / Math.max(w, h)), cv = document.createElement('canvas'); cv.width = Math.round(w * k); cv.height = Math.round(h * k);
+    cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+    return { img: cv.toDataURL('image/png'), fmt: 'PNG', w: cv.width, h: cv.height, name: file.name, alias: 'logo' + (++logoSeq) };
+  }
+  const pavCodes = pav => { const D = getLayout(pav, false); return new Set((D && D.boxes || []).map(b => b.code)); };
+  function matchLogo(name) {
+    const base = name.replace(/\.[a-z0-9]+$/i, '').trim(), pd = st.cfg.pad_digits ?? 2;
+    const toks = base.split(/[\s_\-–.]+/).filter(Boolean);
+    const all = st.cfg.pavilions.map(P => ({ pav: P.name, codes: pavCodes(P.name) }));
+    const find = (code, only) => all.filter(a => (!only || a.pav === only) && a.codes.has(code)).map(a => a.pav);
+    const tryCode = (t, only) => { if (!t) return []; const c = FP.typedCode(t, pd); return find(c, only).map(pav => ({ pav, code: c })); };
+    // 1) pavilion prefix: 08_B02
+    if (toks.length > 1) { const pv = toks[0].replace(/^(p|per|periptero|hall)/i, ''); const P = st.cfg.pavilions.find(q => q.name === pv.padStart(2, '0') || q.name === pv); if (P) { const r = tryCode(toks[1], P.name); if (r.length) return r[0]; } }
+    // 2) the whole name, then the first word: B02.png, "B02 Εταιρεία.jpg"
+    for (const t of [base, toks[0]]) { const r = tryCode(t); if (r.length === 1) return r[0]; if (r.length > 1) return r.find(x => x.pav === st.pav) || { ambiguous: r.map(x => x.pav) }; }
+    return null;
+  }
+  function logoStatus() {
+    if (!st.cfg) return;
+    const D = getLayout(st.pav, false), n = (D && D.boxes || []).filter(b => st.logos[st.pav + '|' + b.code]).length, tot = (D && D.boxes || []).length, all = Object.keys(st.logos).length;
+    $('dlLogos').disabled = !n; $('logoClear').hidden = !all;
+    $('logoCount').textContent = all ? `Λογότυπα σε ${n} από ${tot} stand του περιπτέρου ${st.pav}.` : '';
+  }
+  function renderLogoEditor() {
+    const box = $('lEdit'), code = st.selLogo;
+    if (st.variant !== 'LOGOS' || !code) { box.hidden = true; return; }
+    const L = st.logos[st.pav + '|' + code]; box.hidden = false; box.innerHTML = '';
+    const t = document.createElement('div'); t.innerHTML = `<b class="mono"></b> `; t.querySelector('b').textContent = code; t.append(L ? `λογότυπο: ${L.name}` : 'χωρίς λογότυπο');
+    const row = document.createElement('div'); row.className = 'row'; row.style.marginTop = '8px';
+    const pick = document.createElement('button'); pick.type = 'button'; pick.textContent = L ? 'Αλλαγή λογότυπου' : 'Επιλογή λογότυπου'; pick.onclick = () => $('fileOneLogo').click();
+    row.append(pick);
+    if (L) { const rm = document.createElement('button'); rm.type = 'button'; rm.className = 'ghost'; rm.textContent = 'Αφαίρεση'; rm.onclick = () => { delete st.logos[st.pav + '|' + code]; renderSheet(); }; row.append(rm); }
+    const cl = document.createElement('button'); cl.type = 'button'; cl.className = 'ghost'; cl.textContent = 'Κλείσιμο'; cl.onclick = () => { st.selLogo = null; renderSheet(); }; row.append(cl);
+    box.append(t, row);
+  }
+  $('fileOneLogo').onchange = async () => {
+    const f = $('fileOneLogo').files[0]; $('fileOneLogo').value = ''; if (!f || !st.selLogo) return;
+    try { st.logos[st.pav + '|' + st.selLogo] = await loadLogo(f); await renderSheet(); toast(`Λογότυπο στο ${st.selLogo}.`); } catch (e) { toast('Δεν μπόρεσα να διαβάσω την εικόνα.'); }
+  };
+  (function wireLogos() {
+    const el = $('dropLogos'), inp = $('fileLogos');
+    const go = async files => {
+      if (!st.cfg) { toast('Ανεβάστε πρώτα το DWG.'); return; }
+      const ms = $('logoStatus'); status(ms, `Ανάγνωση ${files.length} εικόνων…`, true); await tick();
+      let ok = 0; const miss = [], amb = [];
+      for (const f of files) {
+        if (!/^image\//.test(f.type)) { miss.push(f.name); continue; }
+        const m = matchLogo(f.name); if (!m) { miss.push(f.name); continue; } if (m.ambiguous) { amb.push(`${f.name} (περίπτερα ${m.ambiguous.join(', ')})`); continue; }
+        try { st.logos[m.pav + '|' + m.code] = await loadLogo(f); ok++; } catch (e) { miss.push(f.name); }
+      }
+      let msg = `Μπήκαν ${ok} λογότυπα.`;
+      if (miss.length) msg += ` Δεν βρέθηκε stand για: ${miss.join(', ')}.`;
+      if (amb.length) msg += ` Ο κωδικός υπάρχει σε πολλά περίπτερα, προσθέστε το περίπτερο μπροστά (π.χ. 08_B02.png): ${amb.join(', ')}.`;
+      ms.textContent = msg;
+      st.variant !== 'LOGOS' ? setVariant('LOGOS') : renderSheet();
+    };
+    inp.onchange = () => { const fs = [...inp.files]; inp.value = ''; if (fs.length) go(fs); };
+    el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('over'); });
+    el.addEventListener('dragleave', () => el.classList.remove('over'));
+    el.addEventListener('drop', e => { e.preventDefault(); el.classList.remove('over'); const fs = [...e.dataTransfer.files]; if (fs.length) go(fs); });
+  })();
+  $('logoCode').onchange = () => { if (st.variant === 'LOGOS') renderSheet(); };
+  $('logoClear').onclick = () => { st.logos = {}; st.selLogo = null; $('logoStatus').textContent = ''; renderSheet(); };
+  $('dlLogos').onclick = async () => { await ensureFont(); const D = getLayout(st.pav, false); if (D) await save(fname(st.pav, 'LOGOS'), toPDF(D, 'LOGOS')); };
   $('dlSite').onclick = async () => { if (!st.site.img) return; await ensureFont(); const D = getLayout(st.pav, true); if (D) await save(fname(st.pav, 'SITE'), toPDF(D, 'SITE')); };
   $('exName').oninput = () => st.pav && ($('fnames').textContent = `${fname(st.pav, 'XARTHS')}  ·  ${fname(st.pav, 'GALAXY')}`);
 
@@ -8604,8 +8735,9 @@ window.dispatchEvent(new Event('dwg-ready'));
       await ensureFont();
       for (const P of st.cfg.pavilions) {
         const D = getLayout(P.name, false); if (!D) continue;
-        z.file(fname(P.name, 'XARTHS'), toPDF(D, 'XARTHS')); z.file(fname(P.name, 'GALAXY'), await toJPG(D, 'GALAXY'));
-        if (st.site.img) { const DS = getLayout(P.name, true); if (DS) z.file(fname(P.name, 'SITE'), toPDF(DS, 'SITE')); }
+        z.file(fname(P.name, 'XARTHS'), toPDF(D, 'XARTHS', P.name));
+        if (Object.keys(st.logos).some(k => k.startsWith(P.name + '|'))) z.file(fname(P.name, 'LOGOS'), toPDF(D, 'LOGOS', P.name)); z.file(fname(P.name, 'GALAXY'), await toJPG(D, 'GALAXY'));
+        if (st.site.img) { const DS = getLayout(P.name, true); if (DS) z.file(fname(P.name, 'SITE'), toPDF(DS, 'SITE', P.name)); }
         await tick();
       }
       const blob = await z.generateAsync({ type: 'blob' });

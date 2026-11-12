@@ -660,6 +660,10 @@ const FP = (() => {
       if (got.r) placed.push(got.r);
     }
     for (const j of jobs) D.texts.push({ x: X(j.out.x), y: Y(j.out.y), lines: j.partsC, size: j.out.fs, code: j.st.code });
+    // every numbered box on the sheet (for per-stand content such as exhibitor logos)
+    const ringPts = p => tr(p.getExteriorRing().getCoordinates().map(c => [c.x, c.y]));
+    D.boxes = ss.map(t => ({ code: t.code, pts: ringPts(t.poly) }));
+    for (const j of freeJobs) if (!j.free) D.boxes.push({ code: j.code, pts: ringPts(j.poly) });
     return D;
   }
 
