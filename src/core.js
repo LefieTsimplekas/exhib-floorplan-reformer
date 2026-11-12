@@ -315,6 +315,8 @@ const FP = (() => {
     if (/\s/.test(o)) { const c = o.replace(/\s+/g, ''); if (c.length <= 6 && new RegExp(DEFAULT_RE).test(c)) return c; }
     return o;
   }
+  // the codes of one box kept whole, in natural order: "B01/A02" -> "A02/B01"
+  const joinedCode = c => c.split('/').slice().sort((a, b) => a.localeCompare(b, 'en', { numeric: true })).join('/');
   // a code typed by a person: Latin letters, two digits, leading letters in capitals (d2a -> D02a)
   const typedCode = (t, n = 2) => pad(norm(t).replace(/\s+/g, ''), n).replace(/^[a-z]+/, m => m.toUpperCase());
   const DEFAULT_RE = '^([A-Za-z]{1,2}\\d+[A-Za-z]?|\\d+[A-Za-z]{0,2})$';
@@ -678,9 +680,12 @@ const FP = (() => {
       if (!asCode && lines.length === 1 && raw.length > 12 && raw.includes(' ')) { const w = raw.split(' '); let best = 1, bd = 1e9; for (let i = 1; i < w.length; i++) { const d = Math.abs(w.slice(0, i).join(' ').length - w.slice(i).join(' ').length); if (d < bd) { bd = d; best = i; } } lines = [w.slice(0, best).join(' '), w.slice(best).join(' ')]; }
       return { code: lines.join('/'), poly: p, lp: p.getCentroid(), free: !asCode };
     });
+    const J = new Set((cfg.joined || []).map(j => j.pav + '|' + j.code));
     const jobs = ss.concat(freeJobs).map(st => {
       const p = st.poly, inner = p.buffer(-0.08);
-      const partsC = st.code.split('/'), nl = partsC.length;
+      // a box holding several codes is shown either with the codes one above the other, or (kept whole) as one code "A02/B01"
+      const jc = !st.free && st.code.includes('/') ? joinedCode(st.code) : null;
+      const partsC = jc && J.has(st.pav + '|' + jc) ? [jc] : st.code.split('/'), nl = partsC.length;
       const longest = partsC.reduce((a, b) => b.length > a.length ? b : a);
       const ref = st.free ? longest : longest.replace(/\d/g, '8').replace(/[A-Za-z]/g, 'W');
       const bb = measure(ref);
@@ -745,6 +750,6 @@ const FP = (() => {
     return D;
   }
 
-  return { typedCode, extraKey, survey, guessLayers, guessStandLayers, _gsl: () => guessStandLayers.debug, loadGeometry, guessBuilding, detect, guessPavilions, assign, layout, norm, pad, DEFAULT_RE, A3, MMPT, modelSpaceId };
+  return { typedCode, joinedCode, extraKey, survey, guessLayers, guessStandLayers, _gsl: () => guessStandLayers.debug, loadGeometry, guessBuilding, detect, guessPavilions, assign, layout, norm, pad, DEFAULT_RE, A3, MMPT, modelSpaceId };
 })();
 if (typeof module !== 'undefined') module.exports = FP;

@@ -625,6 +625,8 @@ const FP = (() => {
     if (/\s/.test(o)) { const c = o.replace(/\s+/g, ''); if (c.length <= 6 && new RegExp(DEFAULT_RE).test(c)) return c; }
     return o;
   }
+  // the codes of one box kept whole, in natural order: "B01/A02" -> "A02/B01"
+  const joinedCode = c => c.split('/').slice().sort((a, b) => a.localeCompare(b, 'en', { numeric: true })).join('/');
   // a code typed by a person: Latin letters, two digits, leading letters in capitals (d2a -> D02a)
   const typedCode = (t, n = 2) => pad(norm(t).replace(/\s+/g, ''), n).replace(/^[a-z]+/, m => m.toUpperCase());
   const DEFAULT_RE = '^([A-Za-z]{1,2}\\d+[A-Za-z]?|\\d+[A-Za-z]{0,2})$';
@@ -988,9 +990,12 @@ const FP = (() => {
       if (!asCode && lines.length === 1 && raw.length > 12 && raw.includes(' ')) { const w = raw.split(' '); let best = 1, bd = 1e9; for (let i = 1; i < w.length; i++) { const d = Math.abs(w.slice(0, i).join(' ').length - w.slice(i).join(' ').length); if (d < bd) { bd = d; best = i; } } lines = [w.slice(0, best).join(' '), w.slice(best).join(' ')]; }
       return { code: lines.join('/'), poly: p, lp: p.getCentroid(), free: !asCode };
     });
+    const J = new Set((cfg.joined || []).map(j => j.pav + '|' + j.code));
     const jobs = ss.concat(freeJobs).map(st => {
       const p = st.poly, inner = p.buffer(-0.08);
-      const partsC = st.code.split('/'), nl = partsC.length;
+      // a box holding several codes is shown either with the codes one above the other, or (kept whole) as one code "A02/B01"
+      const jc = !st.free && st.code.includes('/') ? joinedCode(st.code) : null;
+      const partsC = jc && J.has(st.pav + '|' + jc) ? [jc] : st.code.split('/'), nl = partsC.length;
       const longest = partsC.reduce((a, b) => b.length > a.length ? b : a);
       const ref = st.free ? longest : longest.replace(/\d/g, '8').replace(/[A-Za-z]/g, 'W');
       const bb = measure(ref);
@@ -1055,7 +1060,7 @@ const FP = (() => {
     return D;
   }
 
-  return { typedCode, extraKey, survey, guessLayers, guessStandLayers, _gsl: () => guessStandLayers.debug, loadGeometry, guessBuilding, detect, guessPavilions, assign, layout, norm, pad, DEFAULT_RE, A3, MMPT, modelSpaceId };
+  return { typedCode, joinedCode, extraKey, survey, guessLayers, guessStandLayers, _gsl: () => guessStandLayers.debug, loadGeometry, guessBuilding, detect, guessPavilions, assign, layout, norm, pad, DEFAULT_RE, A3, MMPT, modelSpaceId };
 })();
 if (typeof module !== 'undefined') module.exports = FP;
 
@@ -8363,7 +8368,7 @@ window.dispatchEvent(new Event('dwg-ready'));
   function applyPrev() {
     const Q = st.prev; if (!Q) return; const P = Q.set;
     st.cfg = JSON.parse(JSON.stringify(P.cfg));
-    st.cfg.splits = st.cfg.splits || []; st.cfg.renames = st.cfg.renames || [];
+    st.cfg.splits = st.cfg.splits || []; st.cfg.renames = st.cfg.renames || []; st.cfg.joined = st.cfg.joined || [];
     st.cfg.building = FP.guessBuilding(st.G, st.cfg);
     st.res = FP.detect(st.G, st.cfg);
     st.rot = { ...(P.rot || {}) }; st.shift = JSON.parse(JSON.stringify(P.shift || {})); st.lw = P.lw || 1;
@@ -8450,7 +8455,7 @@ window.dispatchEvent(new Event('dwg-ready'));
       for (const x of st.xrefs) { const gx = FP.guessLayers(FP.survey(x.db)); g.wall = [...new Set(g.wall.concat(gx.wall))]; }
       st.autoStand = false;
       if (!g.stand.length && g.number.length) { g.stand = FP.guessStandLayers(st.G, g.number, g.wall); st.autoStand = g.stand.length > 0; }
-      st.cfg = { stand_layers: g.stand, wall_layers: g.wall, number_layers: g.number, pad_digits: 2, splits: [], renames: [], axis: 'y' };
+      st.cfg = { stand_layers: g.stand, wall_layers: g.wall, number_layers: g.number, pad_digits: 2, splits: [], renames: [], joined: [], axis: 'y' };
       st.cfg.building = FP.guessBuilding(st.G, st.cfg);
       let res = FP.detect(st.G, st.cfg);
       const bad = r => r.unmatched.length + r.stands.filter(s => s.code.includes('/')).length;
@@ -8523,25 +8528,39 @@ window.dispatchEvent(new Event('dwg-ready'));
   function renderReport() {
     const rep = st.rep, chips = $('chips'); chips.innerHTML = '';
     for (const p of rep.pavs) { const c = document.createElement('span'); c.className = 'chip'; c.textContent = `Περ. ${p.name} · ${p.codes.length} stand`; chips.appendChild(c); }
-    const probs = rep.unmatched.length + rep.merged.length + rep.dups.length + rep.noPav.length;
+    const JS0 = new Set((st.cfg.joined || []).map(j => j.pav + '|' + j.code));
+    const probs = rep.unmatched.length + rep.merged.filter(m => !JS0.has(m.pav + '|' + FP.joinedCode(m.code))).length + rep.dups.length + rep.noPav.length;
     const c = document.createElement('span'); c.className = 'chip ' + (probs ? 'warn' : 'ok'); c.textContent = probs ? `${probs} για έλεγχο` : 'Χωρίς εκκρεμότητες'; chips.appendChild(c);
     const box = $('issues'); box.innerHTML = '';
     const add = (cls, title, html) => { const d = document.createElement('div'); d.className = 'issue ' + cls; d.innerHTML = `<h3></h3>`; d.querySelector('h3').textContent = title; if (html) d.appendChild(html); box.appendChild(d); return d; };
     const codesEl = list => { const p = document.createElement('div'); p.className = 'codes'; p.textContent = list.join('  '); return p; };
-    if (rep.merged.length) {
+    // boxes with several codes: split with a line, or keep the box whole with one code "A02/B01"
+    st.cfg.joined = st.cfg.joined || [];
+    const jk = m => m.pav + '|' + FP.joinedCode(m.code), JS = new Set(st.cfg.joined.map(j => j.pav + '|' + j.code));
+    const open = rep.merged.filter(m => !JS.has(jk(m))), kept = rep.merged.filter(m => JS.has(jk(m)));
+    const joinAll = async list => { for (const m of list) if (!JS.has(jk(m))) st.cfg.joined.push({ pav: m.pav, code: FP.joinedCode(m.code) }); await analyze(false); };
+    if (open.length) {
       const wrap = document.createElement('div');
-      const p = document.createElement('p'); p.className = 'small muted'; p.style.margin = '0 0 4px'; p.textContent = 'Στο σχέδιο δεν υπάρχει γραμμή ανάμεσά τους. Χωρίστε το stand στη μέση:'; wrap.appendChild(p);
-      for (const m of rep.merged) {
+      const p = document.createElement('p'); p.className = 'small muted'; p.style.margin = '0 0 4px'; p.textContent = 'Στο σχέδιο δεν υπάρχει γραμμή ανάμεσά τους. Χωρίστε το stand στη μέση ή κρατήστε το ενιαίο με κοινό κωδικό:'; wrap.appendChild(p);
+      if (open.length > 1) { const all = document.createElement('button'); all.type = 'button'; all.className = 'ghost'; all.style.margin = '2px 0 8px'; all.textContent = `Όλα ενιαία (${open.length})`; all.onclick = async () => { await joinAll(open); toast('Τα stand έμειναν ενιαία με κοινό κωδικό.'); }; wrap.appendChild(all); }
+      for (const m of open) {
         const codes = m.code.split('/'); const f = document.createElement('div'); f.className = 'fix';
-        f.innerHTML = `<span class="code"></span><select aria-label="Τρόπος χωρισμού"><option value="vertical">πάνω / κάτω</option><option value="horizontal">αριστερά / δεξιά</option></select><select aria-label="Σειρά"></select><button type="button">Χωρισμός</button>`;
+        f.innerHTML = `<span class="code"></span><select aria-label="Τρόπος χωρισμού"><option value="vertical">πάνω / κάτω</option><option value="horizontal">αριστερά / δεξιά</option></select><select aria-label="Σειρά"></select><button type="button">Χωρισμός</button><button type="button" class="ghost"></button>`;
         f.querySelector('.code').textContent = codes.join(' + ');
-        const [dir, ord] = f.querySelectorAll('select');
+        const [dir, ord] = f.querySelectorAll('select'), [bSplit, bJoin] = f.querySelectorAll('button');
         const fillOrd = () => { const v = dir.value === 'vertical'; ord.innerHTML = ''; [codes, codes.slice().reverse()].forEach((cs, i) => { const o = document.createElement('option'); o.value = i; o.textContent = v ? `${cs[0]} κάτω, ${cs[cs.length - 1]} πάνω` : `${cs[0]} αριστερά, ${cs[cs.length - 1]} δεξιά`; ord.appendChild(o); }); };
         dir.onchange = fillOrd; fillOrd();
-        f.querySelector('button').onclick = async () => { const cs = ord.value === '1' ? codes.slice().reverse() : codes; st.cfg.splits.push({ codes: cs, direction: dir.value }); await analyze(false); toast('Το stand χωρίστηκε.'); };
+        bSplit.onclick = async () => { const cs = ord.value === '1' ? codes.slice().reverse() : codes; st.cfg.splits.push({ codes: cs, direction: dir.value }); await analyze(false); toast('Το stand χωρίστηκε.'); };
+        bJoin.textContent = 'Ενιαίο: ' + FP.joinedCode(m.code); bJoin.title = 'Το κουτί μένει όπως είναι, με τον κωδικό ' + FP.joinedCode(m.code);
+        bJoin.onclick = async () => { await joinAll([m]); toast(`Ενιαίο stand ${FP.joinedCode(m.code)}.`); };
         wrap.appendChild(f);
       }
       add('bad', 'Stand με δύο κωδικούς', wrap);
+    }
+    if (kept.length) {
+      const wrap = document.createElement('div'); wrap.className = 'codes';
+      for (const m of kept) { const b = document.createElement('button'); b.type = 'button'; b.className = 'ghost'; b.style.margin = '0 6px 6px 0'; b.title = 'Αναίρεση: να ξαναεμφανιστεί η επιλογή χωρισμού'; b.textContent = `${FP.joinedCode(m.code)} ✕`; b.onclick = async () => { st.cfg.joined = st.cfg.joined.filter(j => !(j.pav === m.pav && j.code === FP.joinedCode(m.code))); await analyze(false); }; wrap.appendChild(b); }
+      add('info', 'Ενιαία stand με κοινό κωδικό (κλικ για αναίρεση)', wrap);
     }
     if (rep.unmatched.length) add('bad', 'Κωδικοί χωρίς stand', codesEl(rep.unmatched.map(u => u.code)));
     if (rep.dups.length) add('bad', 'Ίδιος κωδικός δύο φορές στο ίδιο περίπτερο', codesEl(rep.dups.map(d => `${d.code} (Περ. ${d.pav})`)));
