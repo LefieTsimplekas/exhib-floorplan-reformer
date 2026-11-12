@@ -104,11 +104,13 @@ details[open] > summary::before{transform:rotate(45deg)}
 .tab{border-radius:999px;padding:6px 12px;font:600 13px var(--f-mono)}
 .tab[aria-selected="true"]{background:var(--ink);color:var(--sheet);border-color:var(--ink)}
 .viewer-head{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center;margin-bottom:12px}
+#rotBtn{margin-left:auto}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
 .seg button{border:0;border-radius:0;padding:6px 12px}
 .seg button[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent)}
 .sheetbox{background:var(--line-2);border-radius:8px;padding:clamp(8px,2vw,24px);display:flex;justify-content:center}
-.sheetbox svg{background:#fff;box-shadow:0 1px 2px rgba(10,20,40,.12),0 8px 24px rgba(10,20,40,.10);width:100%;max-width:640px;height:auto;aspect-ratio:297/420}
+.sheetbox svg{background:#fff;box-shadow:0 1px 2px rgba(10,20,40,.12),0 8px 24px rgba(10,20,40,.10);width:100%;max-width:640px;height:auto}
+.sheetbox svg[style*="420/297"]{max-width:900px}
 .xbox{fill:transparent;stroke:none;cursor:pointer}
 .xbox:hover{fill:rgba(38,56,255,.10)}
 .xbox.sel{fill:rgba(38,56,255,.16);stroke:#2638ff;stroke-width:.6;stroke-dasharray:1.5 1}
@@ -213,6 +215,7 @@ details[open] > summary::before{transform:rotate(45deg)}
         <div id="sheetView" hidden>
           <div class="viewer-head">
             <div class="tabs" id="tabs" role="tablist"></div>
+            <button type="button" id="rotBtn" class="ghost iconbtn" title="Περιστροφή της κάτοψης κατά 90°"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg><span id="rotLbl">Περιστροφή 90°</span></button>
             <div class="seg" role="group" aria-label="Εκδοχή">
               <button type="button" id="vBlue" aria-pressed="true">Μπλε</button>
               <button type="button" id="vBlack" aria-pressed="false">Μαύρο</button>
@@ -774,33 +777,45 @@ const FP = (() => {
     // measure(text) -> {w, h} in points for font size 1 (bold sans)
     const axis = cfg.axis || 'y';
     const P = cfg.pavilions.find(p => p.name === pav);
-    const ss = res.stands.filter(s => s.pav === pav);
-    const ex = res.extra.filter(e => { const c = e.getCentroid(); const v = axis === 'y' ? c.getY() : c.getX(); return v >= P.min && v < P.max; });
-    const allp = ss.map(s => s.poly).concat(ex);
+    const exIn = e => { const c = e.getCentroid(); const v = axis === 'y' ? c.getY() : c.getX(); return v >= P.min && v < P.max; };
     const rings = res.stands.map(s => s.poly).concat(res.extra).map(p => { const R = ringOf(p), e = p.getEnvelopeInternal(); return { R, e: [e.getMinX(), e.getMinY(), e.getMaxX(), e.getMaxY()] }; });
     const [bx0, by0, bx1, by1] = cfg.building;
     const cb = axis === 'y' ? [bx0, P.min, bx1, P.max] : [P.min, by0, P.max, by1];
-    const walls = [];
-    for (const pts of res.WG) walls.push(...clipWall(pts, cb, rings, 0.04));
+    const walls0 = [];
+    for (const pts of res.WG) walls0.push(...clipWall(pts, cb, rings, 0.04));
+    // optional rotation of the sheet in steps of 90° (counter-clockwise): the geometry turns, codes are then placed upright
+    const rot = (((opts.rotate || 0) % 360) + 360) % 360;
+    const rp = rot === 90 ? ([x, y]) => [-y, x] : rot === 180 ? ([x, y]) => [-x, -y] : rot === 270 ? ([x, y]) => [y, -x] : (q => q);
+    const rpoly = p => rot ? GF.createPolygon(GF.createLinearRing(p.getExteriorRing().getCoordinates().map(c => { const [x, y] = rp([c.x, c.y]); return new Co(x, y); }))) : p;
+    const RS = res.stands.map(t => rot ? { ...t, poly: rpoly(t.poly), lp: PT(...rp([t.lp.getX(), t.lp.getY()])) } : t);
+    const RE = res.extra.map(p => { const q = rpoly(p); q.__key = extraKey(p); q.__in = exIn(p); return q; });
+    const walls = walls0.map(w => w.map(rp));
+    const ss = RS.filter(t => t.pav === pav);
+    const ex = RE.filter(q => q.__in);
+    const allp = ss.map(t => t.poly).concat(ex);
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     const grow = pts => { for (const [x, y] of pts) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; } };
     walls.forEach(grow); allp.forEach(p => grow(p.getExteriorRing().getCoordinates().map(c => [c.x, c.y])));
     if (!isFinite(x0)) return null;
     x0 -= 1; y0 -= 1; x1 += 1; y1 += 1;
-    const m = 0.06, axL = m * A3.W, axW = (1 - 2 * m) * A3.W;
+    // page: A3 portrait, or landscape when asked (opts.page) or when a rotated plan is wider than tall (opts.autoLandscape)
+    let PW = A3.W, PH = A3.H;
+    if (opts.page) { PW = opts.page.W; PH = opts.page.H; }
+    else if (opts.autoLandscape && (x1 - x0) > (y1 - y0)) { PW = A3.H; PH = A3.W; }
+    const m = 0.06, axL = m * PW, axW = (1 - 2 * m) * PW;
     // optional space kept free above/below the plan (mm), e.g. for an exhibition image on the site version
     const rT = opts.reserveTop || 0, rB = opts.reserveBottom || 0;
-    const axB = 0.7 * m * A3.H + rB, axH = (1 - 1.4 * m) * A3.H - rT - rB;
+    const axB = 0.7 * m * PH + rB, axH = (1 - 1.4 * m) * PH - rT - rB;
     const s = Math.min(axW / (x1 - x0), axH / (y1 - y0));
     const offX = axL + (axW - (x1 - x0) * s) / 2, offB = axB + (axH - (y1 - y0) * s) / 2;
-    const X = x => offX + (x - x0) * s, Y = y => A3.H - (offB + (y - y0) * s);
+    const X = x => offX + (x - x0) * s, Y = y => PH - (offB + (y - y0) * s);
     const tr = pts => pts.map(([x, y]) => [X(x), Y(y)]);
     const ptu = s / MMPT; // points per drawing unit
-    const D = { walls: walls.map(tr), stands: allp.map(p => tr(p.getExteriorRing().getCoordinates().map(c => [c.x, c.y]))), texts: [],
-      extras: ex.map(p => ({ key: extraKey(p), pts: tr(p.getExteriorRing().getCoordinates().map(c => [c.x, c.y])) })) };
+    const D = { page: { W: PW, H: PH }, walls: walls.map(tr), stands: allp.map(p => tr(p.getExteriorRing().getCoordinates().map(c => [c.x, c.y]))), texts: [],
+      extras: ex.map(p => ({ key: p.__key, pts: tr(p.getExteriorRing().getCoordinates().map(c => [c.x, c.y])) })) };
     const MAXF = cfg.max_font ?? 22, MINF = cfg.min_font ?? 7, OUTF = cfg.outside_font ?? 11, OUTMIN = 5.5;
     // obstacles for labels placed outside: every stand (all pavilions), walls of this sheet, labels already placed
-    const obst = res.stands.map(t => t.poly).concat(res.extra).map(p => { const e = p.getEnvelopeInternal(); return { p, e: [e.getMinX(), e.getMinY(), e.getMaxX(), e.getMaxY()] }; });
+    const obst = RS.map(t => t.poly).concat(RE).map(p => { const e = p.getEnvelopeInternal(); return { p, e: [e.getMinX(), e.getMinY(), e.getMaxX(), e.getMaxY()] }; });
     const wallSegs = []; for (const w of walls) for (let i = 0; i + 1 < w.length; i++) wallSegs.push([w[i][0], w[i][1], w[i + 1][0], w[i + 1][1]]);
     const placed = [];
     const segHitsRect = (s4, r) => { // Liang–Barsky
@@ -820,8 +835,8 @@ const FP = (() => {
       return true;
     };
     const labels = cfg.extra_labels || {};
-    const freeJobs = ex.filter(p => (labels[extraKey(p)] || '').trim()).map(p => {
-      const raw = labels[extraKey(p)].trim();
+    const freeJobs = ex.filter(p => (labels[p.__key] || '').trim()).map(p => {
+      const raw = labels[p.__key].trim();
       const NRE2 = new RegExp(cfg.number_regex || DEFAULT_RE);
       const asCode = NRE2.test(norm(raw)) ? typedCode(raw, cfg.pad_digits ?? 2) : null;
       let lines = asCode ? [asCode] : raw.split(/\s*\n\s*/);
@@ -8046,7 +8061,7 @@ window.dispatchEvent(new Event('dwg-ready'));
 <script>
 (() => {
   const $ = id => document.getElementById(id);
-  const st = { host: null, sv: null, xrefNeed: [], xrefs: [], G: null, cfg: null, res: null, rep: null, pav: null, variant: 'GALAXY', layouts: {}, fileName: '', site: { img: null, w: 0, h: 0, fmt: 'PNG', pos: 'top', size: 'M' } };
+  const st = { host: null, sv: null, xrefNeed: [], xrefs: [], G: null, cfg: null, res: null, rep: null, pav: null, variant: 'GALAXY', layouts: {}, fileName: '', site: { img: null, w: 0, h: 0, fmt: 'PNG', pos: 'top', size: 'M' }, rot: {} };
   let lib = null, dl = null;
 
   // ---------- capabilities ----------
@@ -8301,27 +8316,35 @@ window.dispatchEvent(new Event('dwg-ready'));
   function measure(t) { mcan.font = `700 100px ${FONT}`; const m = mcan.measureText(t); return { w: m.width / 100, h: (m.actualBoundingBoxAscent + m.actualBoundingBoxDescent) / 100 || 0.72 }; }
   // site version: the image sits in a band above or below the plan; the plan is fitted into what is left
   const SIZES = { S: 45, M: 75, L: 110 }, MARGIN_X = 0.06 * 297, MARGIN_Y = 0.042 * 420, GAP = 6;
-  function siteBand() {
-    const S = st.site, maxH = SIZES[S.size] || 75, availW = 297 - 2 * MARGIN_X;
+  function siteBand(pg = { W: 297, H: 420 }) {
+    const S = st.site, maxH = (SIZES[S.size] || 75) * (pg.H < pg.W ? 0.8 : 1), mx = 0.06 * pg.W, my = 0.042 * pg.H, availW = pg.W - 2 * mx;
     const ar = S.img ? S.w / S.h : 4;
     let bh = Math.min(maxH, availW / ar), bw = bh * ar;
-    const x = (297 - bw) / 2, y = S.pos === 'bottom' ? 420 - MARGIN_Y - bh : MARGIN_Y;
+    const x = (pg.W - bw) / 2, y = S.pos === 'bottom' ? pg.H - my - bh : my;
     return { x, y, w: bw, h: bh, reserve: bh + GAP };
   }
   function getLayout(pav, site) {
-    const b = site ? siteBand() : null, key = site ? `${pav}|site|${st.site.pos}|${b.reserve.toFixed(1)}` : pav;
-    if (!st.layouts[key]) st.layouts[key] = FP.layout(st.res, st.cfg, pav, measure, b ? (st.site.pos === 'bottom' ? { reserveBottom: b.reserve } : { reserveTop: b.reserve }) : {});
+    const rot = st.rot[pav] || 0;
+    const baseKey = pav + (rot ? `|r${rot}` : '');
+    if (!st.layouts[baseKey]) st.layouts[baseKey] = FP.layout(st.res, st.cfg, pav, measure, { rotate: rot, autoLandscape: !!rot });
+    if (!site) return st.layouts[baseKey];
+    // site version: same page orientation as the plain sheet, image band on that page
+    const base = st.layouts[baseKey]; if (!base) return null;
+    const b = siteBand(base.page), key = `${baseKey}|site|${st.site.pos}|${b.reserve.toFixed(1)}`;
+    const opts = { rotate: rot, page: base.page, ...(st.site.pos === 'bottom' ? { reserveBottom: b.reserve } : { reserveTop: b.reserve }) };
+    if (!st.layouts[key]) st.layouts[key] = FP.layout(st.res, st.cfg, pav, measure, opts);
     return st.layouts[key];
   }
   const style = v => v === 'XARTHS' ? { stand: '#000000', slw: 0.6 } : { stand: '#0000ff', slw: 0.9 };
   const PT = FP.MMPT, WALL_LW = 0.45;
   function toSVG(D, v, interactive) {
     const S = style(v), f = n => n.toFixed(2);
-    let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 297 420" role="img" aria-label="Κάτοψη περιπτέρου">`;
+    const PG = D.page || { W: 297, H: 420 };
+    let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${PG.W} ${PG.H}" style="aspect-ratio:${PG.W}/${PG.H}" role="img" aria-label="Κάτοψη περιπτέρου">`;
     s += `<path d="${D.walls.map(p => 'M' + p.map(q => f(q[0]) + ' ' + f(q[1])).join('L')).join('')}" fill="none" stroke="#000" stroke-width="${WALL_LW * PT}" stroke-linecap="butt"/>`;
     s += `<path d="${D.stands.map(p => 'M' + p.map(q => f(q[0]) + ' ' + f(q[1])).join('L') + 'Z').join('')}" fill="none" stroke="${S.stand}" stroke-width="${S.slw * PT}" stroke-linejoin="miter"/>`;
     if (v === 'SITE') {
-      const b = siteBand();
+      const b = siteBand(PG);
       if (st.site.img) s += `<image href="${st.site.img}" x="${f(b.x)}" y="${f(b.y)}" width="${f(b.w)}" height="${f(b.h)}" preserveAspectRatio="xMidYMid meet"/>`;
       else s += `<rect x="${f(b.x)}" y="${f(b.y)}" width="${f(b.w)}" height="${f(b.h)}" fill="#f1f3fb" stroke="#2638ff" stroke-width=".4" stroke-dasharray="2 1.5"/><text x="${f(b.x + b.w / 2)}" y="${f(b.y + b.h / 2)}" font-family='${FONT}' font-size="6" fill="#2638ff" text-anchor="middle" dominant-baseline="central">Η εικόνα της έκθεσης μπαίνει εδώ</text>`;
     }
@@ -8335,19 +8358,21 @@ window.dispatchEvent(new Event('dwg-ready'));
     return s + '</svg>';
   }
   function toPDF(D, v) {
-    const S = style(v), { jsPDF } = window.jspdf, doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a3' });
+    const PG = D.page || { W: 297, H: 420 };
+    const S = style(v), { jsPDF } = window.jspdf, doc = new jsPDF({ orientation: PG.W > PG.H ? 'landscape' : 'portrait', unit: 'mm', format: 'a3' });
     doc.setLineCap('butt'); doc.setLineJoin('miter');
     const poly = (p, close) => { const segs = []; for (let i = 1; i < p.length; i++) segs.push([p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]]); doc.lines(segs, p[0][0], p[0][1], [1, 1], 'S', !!close); };
     doc.setDrawColor(0, 0, 0); doc.setLineWidth(WALL_LW * PT); D.walls.forEach(p => poly(p, false));
     const c = S.stand === '#0000ff' ? [0, 0, 255] : [0, 0, 0]; doc.setDrawColor(...c); doc.setLineWidth(S.slw * PT); D.stands.forEach(p => poly(p, false));
-    if (v === 'SITE' && st.site.img) { const b = siteBand(); doc.addImage(st.site.img, st.site.fmt, b.x, b.y, b.w, b.h, undefined, 'FAST'); }
+    if (v === 'SITE' && st.site.img) { const b = siteBand(PG); doc.addImage(st.site.img, st.site.fmt, b.x, b.y, b.w, b.h, undefined, 'FAST'); }
     doc.addFileToVFS('StandSans-Bold.ttf', FONT_B64); doc.addFont('StandSans-Bold.ttf', 'StandSans', 'bold');
     doc.setFont('StandSans', 'bold'); doc.setTextColor(17, 17, 17);
     for (const t of D.texts) { doc.setFontSize(t.size); const lh = t.size * PT * 1.15, n = t.lines.length; t.lines.forEach((ln, i) => doc.text(ln, t.x, t.y + (i - (n - 1) / 2) * lh, { align: 'center', baseline: 'middle' })); }
     return doc.output('blob');
   }
   function toJPG(D, v) {
-    const S = style(v), k = 300 / 25.4, cv = document.createElement('canvas'); cv.width = Math.round(297 * k); cv.height = Math.round(420 * k);
+    const PG = D.page || { W: 297, H: 420 };
+    const S = style(v), k = 300 / 25.4, cv = document.createElement('canvas'); cv.width = Math.round(PG.W * k); cv.height = Math.round(PG.H * k);
     const g = cv.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, cv.width, cv.height); g.lineCap = 'butt'; g.lineJoin = 'miter';
     const path = (p, close) => { g.beginPath(); g.moveTo(p[0][0] * k, p[0][1] * k); for (let i = 1; i < p.length; i++) g.lineTo(p[i][0] * k, p[i][1] * k); if (close) g.closePath(); g.stroke(); };
     g.strokeStyle = '#000'; g.lineWidth = WALL_LW * PT * k; D.walls.forEach(p => path(p, false));
@@ -8371,7 +8396,7 @@ window.dispatchEvent(new Event('dwg-ready'));
     const D = getLayout(st.pav, isSite());
     box.innerHTML = D ? toSVG(D, st.variant, true) : '<p class="muted">Δεν υπάρχει τίποτα σε αυτό το περίπτερο.</p>';
     $('dlSite').disabled = !st.site.img || !st.res;
-    renderExtraEditor();
+    renderExtraEditor(); rotLabel();
     $('fnames').textContent = `${fname(st.pav, 'XARTHS')}  ·  ${fname(st.pav, 'GALAXY')}${st.site.img ? '  ·  ' + fname(st.pav, 'SITE') : ''}`;
     $('dlPdf').textContent = 'Λήψη PDF (μαύρο)'; $('dlJpg').textContent = 'Λήψη JPG (μπλε)';
   }
@@ -8381,7 +8406,7 @@ window.dispatchEvent(new Event('dwg-ready'));
   });
   function renderExtraEditor() {
     const box = $('xEdit'); const key = st.selExtra;
-    const D = st.layouts[st.pav]; const has = D && D.extras && D.extras.some(x => x.key === key);
+    const D = key ? getLayout(st.pav, isSite()) : null; const has = D && D.extras && D.extras.some(x => x.key === key);
     box.hidden = !has; if (!has) return;
     const lab = (st.cfg.extra_labels || {})[key] || '';
     box.innerHTML = '';
@@ -8398,6 +8423,8 @@ window.dispatchEvent(new Event('dwg-ready'));
     row.append(ok, clr, cancel); box.append(lb, row);
   }
   const setVariant = v => { st.variant = v; [['vBlue', 'GALAXY'], ['vBlack', 'XARTHS'], ['vSite', 'SITE']].forEach(([id, k]) => $(id).setAttribute('aria-pressed', String(k === v))); renderSheet(); };
+  const rotLabel = () => { const r = st.rot[st.pav] || 0; $('rotLbl').textContent = r ? `Περιστροφή · ${r}°` : 'Περιστροφή 90°'; };
+  $('rotBtn').onclick = async () => { st.rot[st.pav] = ((st.rot[st.pav] || 0) + 90) % 360; rotLabel(); await renderSheet(); };
   $('vBlue').onclick = () => setVariant('GALAXY');
   $('vBlack').onclick = () => setVariant('XARTHS');
   $('vSite').onclick = () => setVariant('SITE');

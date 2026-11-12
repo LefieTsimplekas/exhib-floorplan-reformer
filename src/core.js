@@ -522,33 +522,45 @@ const FP = (() => {
     // measure(text) -> {w, h} in points for font size 1 (bold sans)
     const axis = cfg.axis || 'y';
     const P = cfg.pavilions.find(p => p.name === pav);
-    const ss = res.stands.filter(s => s.pav === pav);
-    const ex = res.extra.filter(e => { const c = e.getCentroid(); const v = axis === 'y' ? c.getY() : c.getX(); return v >= P.min && v < P.max; });
-    const allp = ss.map(s => s.poly).concat(ex);
+    const exIn = e => { const c = e.getCentroid(); const v = axis === 'y' ? c.getY() : c.getX(); return v >= P.min && v < P.max; };
     const rings = res.stands.map(s => s.poly).concat(res.extra).map(p => { const R = ringOf(p), e = p.getEnvelopeInternal(); return { R, e: [e.getMinX(), e.getMinY(), e.getMaxX(), e.getMaxY()] }; });
     const [bx0, by0, bx1, by1] = cfg.building;
     const cb = axis === 'y' ? [bx0, P.min, bx1, P.max] : [P.min, by0, P.max, by1];
-    const walls = [];
-    for (const pts of res.WG) walls.push(...clipWall(pts, cb, rings, 0.04));
+    const walls0 = [];
+    for (const pts of res.WG) walls0.push(...clipWall(pts, cb, rings, 0.04));
+    // optional rotation of the sheet in steps of 90° (counter-clockwise): the geometry turns, codes are then placed upright
+    const rot = (((opts.rotate || 0) % 360) + 360) % 360;
+    const rp = rot === 90 ? ([x, y]) => [-y, x] : rot === 180 ? ([x, y]) => [-x, -y] : rot === 270 ? ([x, y]) => [y, -x] : (q => q);
+    const rpoly = p => rot ? GF.createPolygon(GF.createLinearRing(p.getExteriorRing().getCoordinates().map(c => { const [x, y] = rp([c.x, c.y]); return new Co(x, y); }))) : p;
+    const RS = res.stands.map(t => rot ? { ...t, poly: rpoly(t.poly), lp: PT(...rp([t.lp.getX(), t.lp.getY()])) } : t);
+    const RE = res.extra.map(p => { const q = rpoly(p); q.__key = extraKey(p); q.__in = exIn(p); return q; });
+    const walls = walls0.map(w => w.map(rp));
+    const ss = RS.filter(t => t.pav === pav);
+    const ex = RE.filter(q => q.__in);
+    const allp = ss.map(t => t.poly).concat(ex);
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     const grow = pts => { for (const [x, y] of pts) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; } };
     walls.forEach(grow); allp.forEach(p => grow(p.getExteriorRing().getCoordinates().map(c => [c.x, c.y])));
     if (!isFinite(x0)) return null;
     x0 -= 1; y0 -= 1; x1 += 1; y1 += 1;
-    const m = 0.06, axL = m * A3.W, axW = (1 - 2 * m) * A3.W;
+    // page: A3 portrait, or landscape when asked (opts.page) or when a rotated plan is wider than tall (opts.autoLandscape)
+    let PW = A3.W, PH = A3.H;
+    if (opts.page) { PW = opts.page.W; PH = opts.page.H; }
+    else if (opts.autoLandscape && (x1 - x0) > (y1 - y0)) { PW = A3.H; PH = A3.W; }
+    const m = 0.06, axL = m * PW, axW = (1 - 2 * m) * PW;
     // optional space kept free above/below the plan (mm), e.g. for an exhibition image on the site version
     const rT = opts.reserveTop || 0, rB = opts.reserveBottom || 0;
-    const axB = 0.7 * m * A3.H + rB, axH = (1 - 1.4 * m) * A3.H - rT - rB;
+    const axB = 0.7 * m * PH + rB, axH = (1 - 1.4 * m) * PH - rT - rB;
     const s = Math.min(axW / (x1 - x0), axH / (y1 - y0));
     const offX = axL + (axW - (x1 - x0) * s) / 2, offB = axB + (axH - (y1 - y0) * s) / 2;
-    const X = x => offX + (x - x0) * s, Y = y => A3.H - (offB + (y - y0) * s);
+    const X = x => offX + (x - x0) * s, Y = y => PH - (offB + (y - y0) * s);
     const tr = pts => pts.map(([x, y]) => [X(x), Y(y)]);
     const ptu = s / MMPT; // points per drawing unit
-    const D = { walls: walls.map(tr), stands: allp.map(p => tr(p.getExteriorRing().getCoordinates().map(c => [c.x, c.y]))), texts: [],
-      extras: ex.map(p => ({ key: extraKey(p), pts: tr(p.getExteriorRing().getCoordinates().map(c => [c.x, c.y])) })) };
+    const D = { page: { W: PW, H: PH }, walls: walls.map(tr), stands: allp.map(p => tr(p.getExteriorRing().getCoordinates().map(c => [c.x, c.y]))), texts: [],
+      extras: ex.map(p => ({ key: p.__key, pts: tr(p.getExteriorRing().getCoordinates().map(c => [c.x, c.y])) })) };
     const MAXF = cfg.max_font ?? 22, MINF = cfg.min_font ?? 7, OUTF = cfg.outside_font ?? 11, OUTMIN = 5.5;
     // obstacles for labels placed outside: every stand (all pavilions), walls of this sheet, labels already placed
-    const obst = res.stands.map(t => t.poly).concat(res.extra).map(p => { const e = p.getEnvelopeInternal(); return { p, e: [e.getMinX(), e.getMinY(), e.getMaxX(), e.getMaxY()] }; });
+    const obst = RS.map(t => t.poly).concat(RE).map(p => { const e = p.getEnvelopeInternal(); return { p, e: [e.getMinX(), e.getMinY(), e.getMaxX(), e.getMaxY()] }; });
     const wallSegs = []; for (const w of walls) for (let i = 0; i + 1 < w.length; i++) wallSegs.push([w[i][0], w[i][1], w[i + 1][0], w[i + 1][1]]);
     const placed = [];
     const segHitsRect = (s4, r) => { // Liang–Barsky
@@ -568,8 +580,8 @@ const FP = (() => {
       return true;
     };
     const labels = cfg.extra_labels || {};
-    const freeJobs = ex.filter(p => (labels[extraKey(p)] || '').trim()).map(p => {
-      const raw = labels[extraKey(p)].trim();
+    const freeJobs = ex.filter(p => (labels[p.__key] || '').trim()).map(p => {
+      const raw = labels[p.__key].trim();
       const NRE2 = new RegExp(cfg.number_regex || DEFAULT_RE);
       const asCode = NRE2.test(norm(raw)) ? typedCode(raw, cfg.pad_digits ?? 2) : null;
       let lines = asCode ? [asCode] : raw.split(/\s*\n\s*/);
